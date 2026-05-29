@@ -18,7 +18,7 @@ export default function PrintReceiptPage({ params }: { params: Promise<{ id: str
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .select('*, items:order_items(*)')
-          .eq('id', parseInt(id))
+          .eq('id', id)
           .single();
 
         if (orderError || !orderData) throw new Error('Order not found');
