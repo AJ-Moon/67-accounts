@@ -11,8 +11,6 @@ import { formatCurrency } from '@/lib/utils';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from '@/lib/supabase';
-import { buildReceiptCopies } from '@/lib/printUtils';
-
 type Item = {
   id: number;
   name: string;
@@ -194,27 +192,12 @@ export default function POSPage() {
         
         if (print && resData.order?.id) {
            const fullOrder = resData.order;
-           
-           // Fetch Settings for Full Branding Map
-           let { data: settingsData } = await supabase.from('settings').select('*').limit(1).maybeSingle();
-           
            try {
-              const copies = buildReceiptCopies(fullOrder, settingsData);
-              const bridgeRes = await fetch('http://localhost:7878/print', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ copies })
-              });
-              const bridgeData = await bridgeRes.json();
-              
-              if (bridgeRes.ok && bridgeData.success) {
-                 toast.success("Printed to local bridge automatically!");
-              } else {
-                 throw new Error("Bridge unavailable");
-              }
+              const { executeIframePrintRoutine } = await import('@/lib/printUtils');
+              executeIframePrintRoutine(fullOrder.id, fullOrder.items);
+              toast.success("Spooled sequentially! Please observe the thermal splits outputting naturally.");
            } catch(e) {
-              toast.warning("Direct print bridge unavailable. Falling back to Browser UI.");
-              window.open(`/print/${fullOrder.id}`, '_blank', 'width=400,height=600');
+              toast.error("Bridge routine failed inside UI.");
            }
         }
 

@@ -118,9 +118,14 @@ function ReceiptCopy({ order, copyType, settings }: { order: any, copyType: 'cus
   );
 }
 
+import { useSearchParams } from 'next/navigation';
+
 export default function PrintReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const { id } = unwrappedParams;
+  const searchParams = useSearchParams();
+  const copyParam = searchParams.get('copy');
+
   const [order, setOrder] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -200,24 +205,17 @@ export default function PrintReceiptPage({ params }: { params: Promise<{ id: str
             }
          }
          
-         /* Specific Copy boundaries defining cut structures perfectly natively */
          .receipt-copy {
             width: 80mm;
             padding: 4mm;
-            padding-bottom: 12mm; /* Ensure ample spacing for printers missing aggressive Esc/Pos auto-cuts natively */
-            page-break-after: always;
-            break-after: page;
-         }
-         .receipt-copy:last-child {
-            page-break-after: auto;
-            break-after: auto;
+            padding-bottom: 2mm; 
          }
        `}} />
        
-       <ReceiptCopy order={order} copyType="customer" settings={settings} />
-       <ReceiptCopy order={order} copyType="shop" settings={settings} />
-       <ReceiptCopy order={order} copyType="bar" settings={settings} />
-       <ReceiptCopy order={order} copyType="kitchen" settings={settings} />
+       {(!copyParam || copyParam === 'customer') && <ReceiptCopy order={order} copyType="customer" settings={settings} />}
+       {(!copyParam || copyParam === 'shop') && <ReceiptCopy order={order} copyType="shop" settings={settings} />}
+       {(!copyParam || copyParam === 'bar') && <ReceiptCopy order={order} copyType="bar" settings={settings} />}
+       {(!copyParam || copyParam === 'kitchen') && <ReceiptCopy order={order} copyType="kitchen" settings={settings} />}
 
     </div>
   );
