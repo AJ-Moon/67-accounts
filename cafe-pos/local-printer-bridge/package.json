@@ -1,0 +1,13 @@
+{
+  "name": "cafe-pos-print-bridge",
+  "version": "1.0.0",
+  "description": "Local receipt printing bridge for Chrome to natively hit USB drivers and bypass window.print",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}
