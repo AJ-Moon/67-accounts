@@ -46,8 +46,8 @@ export async function POST(request: Request) {
       return {
         itemId: i.id,
         name: i.name,
-        category: normalizeCategory(i.category),
-        subcategory: i.subcategory || null,
+        item_category: normalizeCategory(i.category),
+        item_sub_category: i.subcategory || i.sub_category || null,
         price,
         quantity,
         notes: i.notes || '',

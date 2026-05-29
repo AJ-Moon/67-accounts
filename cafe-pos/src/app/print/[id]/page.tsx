@@ -4,6 +4,120 @@ import { useEffect, useState, use } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
+// Helper component serving individual receipt instances separating thermal splits
+function ReceiptCopy({ order, copyType, settings }: { order: any, copyType: 'customer' | 'shop' | 'bar' | 'kitchen', settings: any }) {
+  if (!order) return null;
+
+  const dObj = new Date(order.createdAt);
+  const dateStr = `${dObj.toLocaleDateString()} ${dObj.toLocaleTimeString()}`;
+  
+  let itemsToPrint = order.items || [];
+  if (copyType === 'bar') {
+    itemsToPrint = itemsToPrint.filter((i: any) => i.item_category === 'Drinks');
+    if (itemsToPrint.length === 0) return null; // Drop empty copies seamlessly
+  }
+  if (copyType === 'kitchen') {
+    itemsToPrint = itemsToPrint.filter((i: any) => i.item_category === 'Food');
+    if (itemsToPrint.length === 0) return null; // Drop empty copies seamlessly
+  }
+
+  const isKitchenOrBar = copyType === 'kitchen' || copyType === 'bar';
+  const showFullBranding = copyType === 'customer';
+  const discountAmount = order.discountAmount ?? order.discount ?? 0;
+
+  let title = "*** CUSTOMER COPY ***";
+  if (copyType === 'shop') title = "*** SHOP COPY ***";
+  if (copyType === 'bar') title = "*** BAR COPY / DRINKS ***";
+  if (copyType === 'kitchen') title = "*** KITCHEN COPY / FOOD ***";
+
+  return (
+    <div className="receipt-copy">
+      {/* Dynamic Branding Only Appears on Customer Print */}
+      {showFullBranding && (
+        <div className="text-center mb-4">
+          <h1 className="font-bold text-lg leading-tight uppercase">{settings?.shopName || '67 CAFE'}</h1>
+          <div className="uppercase">Welcome to {settings?.shopName || '67 CAFE'}</div>
+          {settings?.address && <div className="uppercase">{settings.address}</div>}
+          {settings?.phone && <div className="uppercase">{settings.phone}</div>}
+        </div>
+      )}
+
+      {/* Global Meta Variables */}
+      <div className="mb-4 text-center">
+        <div className="font-bold mb-1">{title}</div>
+        <div>Order: {order.orderNumber}</div>
+        <div>Date: {dateStr}</div>
+        <div className="uppercase">Source: {order.source}</div>
+        {order.createdBy && <div className="uppercase">User: {order.createdBy}</div>}
+        {!isKitchenOrBar && <div className="uppercase mt-1 font-semibold">Payment: {order.paymentMethod}</div>}
+      </div>
+
+      <div className="border-t border-dashed border-black my-2"></div>
+      
+      {/* Item Blocks */}
+      <div className="w-full">
+        <table className="w-full text-left table-fixed">
+          <tbody>
+            {itemsToPrint.map((item: any, idx: number) => {
+               const hasUpsize = item.selectedOptions?.upsize;
+               const hasOption = item.selectedOptions?.option;
+               const notes = item.notes;
+
+               return (
+                 <tr key={idx} className="align-top">
+                   <td className="w-10 font-bold">{item.quantity}x</td>
+                   <td className="pr-2">
+                     <div className="font-bold uppercase break-words">{item.name}</div>
+                     {hasUpsize && <div className="text-[10px] uppercase pl-1">+ Upsize</div>}
+                     {hasOption && <div className="text-[10px] uppercase pl-1">+ {hasOption}</div>}
+                     {notes && <div className="text-[10px] italic pl-1 text-slate-800 break-words">Note: {notes}</div>}
+                   </td>
+                   {!isKitchenOrBar && (
+                     <td className="w-16 text-right font-medium">
+                       {formatCurrency(item.price * item.quantity)}
+                     </td>
+                   )}
+                 </tr>
+               );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="border-t border-dashed border-black my-2"></div>
+
+      {/* Pricing Module - Dropped for Kitchen/Bar completely */}
+      {!isKitchenOrBar && (
+        <div className="space-y-1 mb-4">
+          {discountAmount > 0 ? (
+             <>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(order.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Discount</span>
+                  <span>-{formatCurrency(discountAmount)}</span>
+                </div>
+             </>
+          ) : null}
+          <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-dashed border-black">
+            <span>TOTAL</span>
+            <span>{formatCurrency(order.finalTotal)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Footer Details */}
+      {showFullBranding && settings?.footerMessage && (
+        <div className="text-center mt-6 uppercase pb-2">
+          {settings.footerMessage}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PrintReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const { id } = unwrappedParams;
@@ -24,11 +138,11 @@ export default function PrintReceiptPage({ params }: { params: Promise<{ id: str
         if (orderError || !orderData) throw new Error('Order not found');
         setOrder(orderData);
 
-        const { data: settingsData } = await supabase.from('settings').select('*').single();
+        const { data: settingsData } = await supabase.from('settings').select('*').limit(1).maybeSingle();
         if (settingsData) {
           setSettings(settingsData);
         } else {
-          setSettings({ shopName: '67 Cafe', address: '', phone: '', footerMessage: 'Thank you!' });
+          setSettings({ shopName: '67 Cafe', address: '', phone: '', footerMessage: 'Thank you for visiting!' });
         }
         
       } catch (err: any) {
@@ -49,114 +163,62 @@ export default function PrintReceiptPage({ params }: { params: Promise<{ id: str
     }
   }, [loading, order, error]);
 
-  if (loading) return <div className="p-8 text-center">Loading receipt preview...</div>;
-  if (error || !order) return <div className="p-8 text-center text-red-500 font-bold">{error || 'Order not found'}</div>;
-
-  const dObj = new Date(order.createdAt);
-  const dateStr = `${dObj.toLocaleDateString()} ${dObj.toLocaleTimeString()}`;
-
-  const discountAmount = order.discountAmount ?? order.discount ?? 0;
+  if (loading) return <div className="p-8 text-center text-slate-500 font-mono text-xs">Generating 80mm Print Queue...</div>;
+  if (error || !order) return <div className="p-8 text-center text-red-500 font-bold font-mono">[{error || 'Order not found'}]</div>;
 
   return (
-    <div className="w-full max-w-[300px] mx-auto bg-white p-4 text-black text-xs font-mono receipt-container">
+    <div className="receipt-print-area text-black text-xs font-mono">
        <style dangerouslySetInnerHTML={{__html: `
+         /* Global Browser Defaults overrides for clean thermal boundaries */
          @media print {
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            html, body {
+              width: 80mm;
+              margin: 0;
+              padding: 0;
+              background: white;
+            }
             body * {
-               visibility: hidden;
+              visibility: hidden;
             }
-            .receipt-container, .receipt-container * {
-               visibility: visible;
+            .receipt-print-area, .receipt-print-area * {
+              visibility: visible;
             }
-            .receipt-container {
-               position: absolute;
-               left: 0;
-               top: 0;
-               width: 100%;
-               max-width: 80mm; /* standard thermal receipt width */
-               margin: 0;
-               padding: 0;
-               box-shadow: none;
+            .receipt-print-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 80mm;
+              margin: 0;
+              padding: 0;
             }
-            @page { margin: 0; size: auto; }
+            .no-print {
+              display: none !important;
+            }
+         }
+         
+         /* Specific Copy boundaries defining cut structures perfectly natively */
+         .receipt-copy {
+            width: 80mm;
+            padding: 4mm;
+            padding-bottom: 12mm; /* Ensure ample spacing for printers missing aggressive Esc/Pos auto-cuts natively */
+            page-break-after: always;
+            break-after: page;
+         }
+         .receipt-copy:last-child {
+            page-break-after: auto;
+            break-after: auto;
          }
        `}} />
        
-       <div className="text-center mb-4">
-          <h1 className="font-bold text-lg leading-tight uppercase">{settings?.shopName || '67'}</h1>
-          {settings?.address && <div className="uppercase">{settings.address}</div>}
-          {settings?.phone && <div className="uppercase">{settings.phone}</div>}
-       </div>
-       
-       <div className="mb-4">
-          <div className="font-bold text-center mb-1">*** CUSTOMER COPY ***</div>
-          <div>Order: {order.orderNumber}</div>
-          <div>Date: {dateStr}</div>
-          <div className="uppercase">Source: {order.source}</div>
-       </div>
+       <ReceiptCopy order={order} copyType="customer" settings={settings} />
+       <ReceiptCopy order={order} copyType="shop" settings={settings} />
+       <ReceiptCopy order={order} copyType="bar" settings={settings} />
+       <ReceiptCopy order={order} copyType="kitchen" settings={settings} />
 
-       <div className="border-t border-dashed border-black my-2"></div>
-       
-       <div className="w-full">
-         <table className="w-full text-left table-fixed">
-           <tbody>
-             {order.items.map((item: any) => (
-                <tr key={item.id} className="align-top">
-                  <td className="w-8 py-1">{item.quantity}x</td>
-                  <td className="py-1 pr-2 break-words">
-                     {item.name}
-                     {item.selectedOptions?.upsize && <div className="font-bold text-[10px] mt-0.5">Upsize +{formatCurrency(item.selectedOptions.upsizePrice)}</div>}
-                     {item.selectedOptions?.option && <div className="font-bold text-[10px] text-slate-700 mt-0.5 uppercase tracking-tighter">[{item.selectedOptions.option}]</div>}
-                     {item.notes && <div className="italic text-[10px]">Note: {item.notes}</div>}
-                  </td>
-                  <td className="w-16 py-1 text-right font-medium">{formatCurrency(item.price * item.quantity)}</td>
-                </tr>
-             ))}
-           </tbody>
-         </table>
-       </div>
-
-       <div className="border-t border-dashed border-black my-2"></div>
-
-       <div className="flex justify-between mt-1">
-          <span>Subtotal:</span>
-          <span>{formatCurrency(order.subtotal)}</span>
-       </div>
-       {discountAmount > 0 && (
-         <div className="flex justify-between">
-            <span>Discount:</span>
-            <span>-{formatCurrency(discountAmount)}</span>
-         </div>
-       )}
-       <div className="flex justify-between font-bold text-sm my-1">
-          <span>TOTAL:</span>
-          <span>{formatCurrency(order.finalTotal)}</span>
-       </div>
-       <div className="flex justify-between mt-1 mb-2">
-          <span>Paid via:</span>
-          <span className="font-bold">{order.paymentMethod}</span>
-       </div>
-
-       <div className="border-t border-dashed border-black my-2"></div>
-
-       <div className="text-center mt-4">
-          <div className="font-bold">{settings?.footerMessage || 'Thank you for visiting!'}</div>
-       </div>
-       
-       {/* Actions intentionally hidden in print view */}
-       <div className="mt-8 text-center no-print pb-8">
-          <button onClick={() => window.print()} className="bg-black text-white px-4 py-2 rounded -translate-x-1 hover:bg-gray-800 transition-colors mr-2">
-             Print
-          </button>
-          <button onClick={() => window.history.back()} className="border border-black px-4 py-2 rounded hover:bg-gray-100 transition-colors">
-             Back
-          </button>
-       </div>
-
-       <style dangerouslySetInnerHTML={{__html: `
-         @media print {
-            .no-print { display: none; }
-         }
-       `}} />
     </div>
   );
 }
