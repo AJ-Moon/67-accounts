@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  name        String
+  category    String   // "Drink" | "Food"
+  subcategory String?
+  size        String?
+  variant     String?
+  price       Float
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Order {
+  id                 Int         @id @default(autoincrement())
+  orderNumber        String      @unique // e.g., "ORD-1234"
+  status             String      @default("Completed") // "New", "In progress", "Completed", "Cancelled"
+  subtotal           Float
+  discount           Float       @default(0)
+  discountPercentage Float?      @default(0)
+  discountAmount     Float?      @default(0)
+  finalTotal         Float
+  paymentMethod      String      // "Cash", "Card", "Easypaisa/JazzCash"
+  createdAt          DateTime    @default(now())
+  items              OrderItem[]
+}
+
+model OrderItem {
+  id          Int    @id @default(autoincrement())
+  orderId     Int
+  itemId      Int?   // Null if original item deleted
+  name        String // Name captured at checkout
+  category    String 
+  subcategory String?
+  price       Float  // Price captured at checkout
+  quantity    Int
+  notes       String? // E.g., "extra spicy"
+  order       Order  @relation(fields: [orderId], references: [id])
+}
+
+model Settings {
+  id             Int    @id @default(1)
+  shopName       String @default("67 Café")
+  address        String @default("")
+  phone          String @default("")
+  footerMessage  String @default("Thank you!")
+  printerType    String @default("USB") // or "Network"
+  printerAddress String @default("") 
+}
