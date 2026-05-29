@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
 import { Printer, XCircle, Eye } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { buildReceiptCopies } from '@/lib/printUtils';
 
 
 
@@ -66,9 +67,40 @@ export default function OrdersPage() {
     fetchOrders();
   }, []);
 
-  const reprint = (id: number) => {
-    toast.info("Opening receipt...");
-    window.open(`/print/${id}`, '_blank', 'width=400,height=600');
+  const reprint = async (id: number) => {
+    toast.info("Preparing exact receipt copies...");
+    const order = orders.find(o => o.id === id);
+    if (!order || !order.items || order.items.length === 0) {
+       toast.error("No items found for this order. Receipt cannot be printed.");
+       return;
+    }
+    
+    const supabase = createClient();
+    const { data: settingsData } = await supabase.from('settings').select('*').limit(1).maybeSingle();
+
+    try {
+      const copies = buildReceiptCopies(order, settingsData);
+      if (copies.length === 0) {
+         toast.error("Receipt constraints invalid. Cannot print empty block.");
+         return;
+      }
+      
+      const bridgeRes = await fetch('http://localhost:7878/print', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ copies })
+      });
+      const bridgeData = await bridgeRes.json();
+      
+      if (bridgeRes.ok && bridgeData.success) {
+         toast.success("Reprinted to local bridge securely!");
+      } else {
+         throw new Error("Bridge unavailable");
+      }
+    } catch(e) {
+      toast.warning("Direct print bridge unavailable. Falling back to Browser UI.");
+      window.open(`/print/${id}`, '_blank', 'width=400,height=600');
+    }
   };
 
   const updateStatus = async (id: number, new_status: string) => {
