@@ -89,8 +89,7 @@ export async function GET(request: Request) {
     // A. ALL-TIME ACCOUNT BALANCES (from global ledger)
     const accountsList = ['cash', 'credit_card', 'transfer', 'jazzcash', 'foodpanda', 'earnings'];
     const currentBalances = accountsList.reduce((acc, acct) => {
-      const incoming = globalLedger.filter(t => t.destinationAccount === acct).reduce((sum, t) => sum + Number(t.amount), 0)
-                     + globalLedger.filter(t => t.transactionType === 'sale' && t.paymentMethod === acct).reduce((sum, t) => sum + Number(t.amount), 0);
+      const incoming = globalLedger.filter(t => t.destinationAccount === acct).reduce((sum, t) => sum + Number(t.amount), 0);
       const outgoing = globalLedger.filter(t => t.sourceAccount === acct).reduce((sum, t) => sum + Number(t.amount), 0);
       acc[acct] = { incoming, outgoing, current: incoming - outgoing };
       return acc;
