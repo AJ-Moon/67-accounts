@@ -41,12 +41,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     // 3. Update Order record
     const updatePayload: any = {
        status: new_status,
-       status_updated_at: new Date().toISOString(),
-       status_updated_by: user.id
+       updatedAt: new Date().toISOString()
     };
 
-    if (new_status === 'completed') updatePayload.completed_at = new Date().toISOString();
-    if (new_status === 'cancelled') updatePayload.cancelled_at = new Date().toISOString();
+    if (new_status === 'cancelled') {
+        updatePayload.deletedAt = new Date().toISOString();
+        updatePayload.deletedBy = user.id;
+        updatePayload.deleteReason = 'Cancelled via Workflow Transition';
+    }
 
     const { error: updateError } = await supabaseServer
       .from('orders')
@@ -55,18 +57,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (updateError) throw updateError;
 
-    // 4. Record Audit Trail History
-    const { error: historyError } = await supabaseServer
-      .from('order_status_history')
-      .insert({
-         order_id: id,
-         old_status,
-         new_status,
-         changed_by: user.id,
-         note: `Changed via POS UI by User`
-      });
-      
-    if (historyError) console.error("Failed to log status history:", historyError);
+    // 4. Record Audit Trail History - SKIPPED (Not mapped in Schema setup)
 
     // 5. Accounting Deferment: Inject Ledger Transaction ONLY if Completed + Not Duplicate
     if (new_status === 'completed') {
