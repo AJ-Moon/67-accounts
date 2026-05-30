@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -61,7 +62,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     // 5. Accounting Deferment: Inject Ledger Transaction ONLY if Completed + Not Duplicate
     if (new_status === 'completed') {
-        const { data: existingLedger } = await supabaseServer
+        const supabaseAdmin = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+        const { data: existingLedger } = await supabaseAdmin
            .from('ledger_transactions')
            .select('id')
            .eq('orderId', id)
@@ -69,7 +71,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
            .single();
 
         if (!existingLedger) {
-            const { error: ledgerError } = await supabaseServer
+            const { error: ledgerError } = await supabaseAdmin
               .from('ledger_transactions')
               .insert({
                 transactionType: 'sale',
