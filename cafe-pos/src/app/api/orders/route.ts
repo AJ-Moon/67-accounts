@@ -84,6 +84,7 @@ export async function POST(request: Request) {
         finalTotal,
         paymentMethod,
         source: json.source || 'pos',
+        status: 'placed', // Overrides implicit 'posted' triggering proper UI buttons correctly
         createdBy: user?.id || null
       })
       .select()

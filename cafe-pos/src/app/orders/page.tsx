@@ -224,10 +224,10 @@ export default function OrdersPage() {
                     </TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
                     <TableCell className="text-right space-x-2">
-                       {order.status === 'placed' && (
+                       {(order.status === 'placed' || order.status === 'posted') && (
                          <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => updateStatus(order.id, 'getting_ready')}>Start</Button>
                        )}
-                       {(order.status === 'placed' || order.status === 'getting_ready') && (
+                       {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
                          <Button size="sm" className="h-8 text-xs font-bold bg-green-600 hover:bg-green-700 text-white" onClick={() => updateStatus(order.id, 'completed')}>Complete</Button>
                        )}
                       <Dialog>
@@ -274,7 +274,7 @@ export default function OrdersPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                      {(order.status === 'placed' || order.status === 'getting_ready') && (
+                      {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
                          <Button size="sm" variant="ghost" className="h-8 text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700" onClick={() => updateStatus(order.id, 'cancelled')}>Cancel</Button>
                       )}
                       

@@ -25,7 +25,10 @@ export function buildReceiptCopies(order: any, settings: any) {
   const dateStr = `${dObj.toLocaleDateString()} ${dObj.toLocaleTimeString()}`;
 
   const drinks = order.items.filter((i: any) => i.item_category === 'Drinks');
-  const food = order.items.filter((i: any) => i.item_category === 'Food');
+  const food = order.items.filter((i: any) => {
+     const cat = (i.item_category || '').toLowerCase();
+     return cat === 'food' || cat === 'desserts';
+  });
 
   const divider = '-'.repeat(WIDTH) + '\n';
   const dbDivider = '='.repeat(WIDTH) + '\n';
@@ -47,7 +50,7 @@ export function buildReceiptCopies(order: any, settings: any) {
   customer += divider;
   
   order.items.forEach((item: any) => {
-    customer += padText(`${item.quantity}x ${item.name}`.substring(0, 36), formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
+    customer += padText(`${item.quantity}x ${item.name}`, formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
     if (item.selectedOptions?.upsize) customer += `   + Upsize\n`;
     if (item.selectedOptions?.option) customer += `   + ${item.selectedOptions.option}\n`;
   });
@@ -74,7 +77,7 @@ export function buildReceiptCopies(order: any, settings: any) {
   shop += divider;
   
   order.items.forEach((item: any) => {
-    shop += padText(`${item.quantity}x ${item.name}`.substring(0, 36), formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
+    shop += padText(`${item.quantity}x ${item.name}`, formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
     if (item.selectedOptions?.upsize) shop += `   + Upsize\n`;
     if (item.selectedOptions?.option) shop += `   + ${item.selectedOptions.option}\n`;
   });
