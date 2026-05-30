@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
 import { Printer, XCircle, Eye } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
+import { buildReceiptCopies } from '@/lib/printUtils';
 
 
 
@@ -74,13 +75,30 @@ export default function OrdersPage() {
        return;
     }
     
-    // Call the safe iFrame sequential spools avoiding Bridge completely cleanly cutting receipts
+    const supabase = createClient();
+    const { data: settingsData } = await supabase.from('settings').select('*').limit(1).maybeSingle();
+
     try {
-       const { executeIframePrintRoutine } = await import('@/lib/printUtils');
-       executeIframePrintRoutine(order.id, order.items);
-       toast.success("Spooled successfully! Watch printer for physical cuts.");
-    } catch (e) {
-       toast.error("Failed executing spool frames explicitly.");
+      const copies = buildReceiptCopies(order, settingsData);
+      if (copies.length === 0) {
+         toast.error("Receipt constraints invalid. Cannot print empty block.");
+         return;
+      }
+      
+      const bridgeRes = await fetch('http://localhost:7878/print', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ copies })
+      });
+      const bridgeData = await bridgeRes.json();
+      
+      if (bridgeRes.ok && bridgeData.success) {
+         toast.success("Reprinted to local bridge securely!");
+      } else {
+         throw new Error("Bridge unavailable");
+      }
+    } catch(e) {
+      toast.warning("Direct print bridge unavailable. Cannot execute raw hardware print.");
     }
   };
 
