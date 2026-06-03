@@ -43,15 +43,21 @@ export async function POST(request: Request) {
       if (!i.name || price <= 0 || quantity <= 0) {
         throw new Error('Invalid item data');
       }
+
+      let finalNotes = i.notes || '';
+      if (i.selectedOptions) {
+         finalNotes = finalNotes ? `${finalNotes} | ${JSON.stringify(i.selectedOptions)}` : JSON.stringify(i.selectedOptions);
+      }
+
       return {
         itemId: i.id,
         name: i.name,
-        item_category: normalizeCategory(i.category),
-        item_sub_category: i.subcategory || i.sub_category || null,
+        category: normalizeCategory(i.category),
+        subcategory: i.subcategory || i.sub_category || null,
         price,
         quantity,
-        notes: i.notes || '',
-        selectedOptions: i.selectedOptions || { upsize: false, upsizePrice: 0 }
+        totalPrice: Number((price * quantity).toFixed(2)),
+        notes: finalNotes
       };
     });
 
