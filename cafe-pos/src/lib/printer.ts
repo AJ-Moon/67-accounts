@@ -74,8 +74,11 @@ export async function printReceipts(
   }
 
   const items = order.items;
-  const drinksList = items.filter(i => normalizeCategory(i.category) === 'Drinks');
-  const foodList = items.filter(i => normalizeCategory(i.category) === 'Food');
+  const drinksList  = items.filter(i => normalizeCategory(i.category) === 'Drinks');
+  const foodList    = items.filter(i => {
+    const cat = normalizeCategory(i.category).toLowerCase();
+    return cat === 'food' || cat === 'desserts';
+  });
 
   const dObj = new Date(order.createdAt);
   const dateStr = `${dObj.toLocaleDateString()} ${dObj.toLocaleTimeString()}`;

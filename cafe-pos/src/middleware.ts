@@ -47,14 +47,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // RBAC validation 
+  // RBAC validation
   if (user && isAdminRoute) {
-     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-     if (!profile || profile.role !== 'admin') {
-         const url = request.nextUrl.clone()
-         url.pathname = '/'
-         return NextResponse.redirect(url)
-     }
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const role = profile?.role
+
+    // Admin-only routes: dashboard, settings, accounts, ledger, menu management
+    const adminOnlyRoutes = ['/dashboard', '/settings', '/accounts', '/ledger', '/menu']
+    const isAdminOnly = adminOnlyRoutes.some(r => request.nextUrl.pathname.startsWith(r))
+
+    if (isAdminOnly && role !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+
+    // /reports — allowed for admin and desk only, staff gets redirected
+    if (request.nextUrl.pathname.startsWith('/reports') && role !== 'admin' && role !== 'desk') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
