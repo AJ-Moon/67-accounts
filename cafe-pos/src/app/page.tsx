@@ -47,7 +47,7 @@ export default function POSPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [mainCategory, setMainCategory] = useState<string>('Drinks');
-  const [orderSource, setOrderSource] = useState<'pos' | 'website' | 'foodpanda'>('pos');
+
   const [applyDiscount, setApplyDiscount] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -144,7 +144,11 @@ export default function POSPage() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discountAmount = applyDiscount ? subtotal * 0.20 : 0;
+  // Discount (20%) applies to everything EXCEPT Combo Meals
+  const discountableSubtotal = cart
+    .filter(item => (item.subcategory || '').toLowerCase() !== 'combo meal')
+    .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const discountAmount = applyDiscount ? discountableSubtotal * 0.20 : 0;
   const total = Math.max(0, subtotal - discountAmount);
 
   const mainCategories = Array.from(new Set(items.map(i => i.category))).filter(Boolean);
@@ -177,7 +181,6 @@ export default function POSPage() {
         subtotal,
         discountPercentage: applyDiscount ? 20 : 0,
         paymentMethod,
-        source: orderSource,
         printReceipts: print
       };
 
@@ -392,25 +395,6 @@ export default function POSPage() {
             </div>
           </div>
           
-          <div className="space-y-2 pt-1 border-t">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Order Source *</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'POS', value: 'pos' as const },
-                { label: 'Website', value: 'website' as const },
-                { label: 'Foodpanda', value: 'foodpanda' as const }
-              ].map(s => (
-                <button
-                  key={s.value}
-                  onClick={() => setOrderSource(s.value)}
-                  className={`py-2 text-[10px] whitespace-nowrap font-bold rounded-lg border transition-all ${orderSource === s.value ? 'border-purple-600 bg-purple-600 text-white shadow-md' : 'border-slate-200 text-slate-600 hover:border-slate-400 bg-slate-50 shadow-sm'}`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="space-y-2 pt-1 border-t">
             <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Payment Method *</Label>
             <div className="grid grid-cols-5 gap-2">

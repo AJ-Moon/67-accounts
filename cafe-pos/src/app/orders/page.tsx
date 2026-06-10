@@ -41,7 +41,6 @@ export default function OrdersPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const [filterSource, setFilterSource] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterPayment, setFilterPayment] = useState('All');
 
@@ -79,7 +78,7 @@ export default function OrdersPage() {
     const { data: settingsData } = await supabase.from('settings').select('*').limit(1).maybeSingle();
 
     try {
-      const copies = buildReceiptCopies(order, settingsData);
+      const copies = buildReceiptCopies(order, settingsData, true); // reprint = customer copy only
       if (copies.length === 0) {
          toast.error("Receipt constraints invalid. Cannot print empty block.");
          return;
@@ -151,7 +150,6 @@ export default function OrdersPage() {
 
   const filteredOrders = orders.filter(o => 
     (filterStatus === 'All' || o.status === filterStatus) &&
-    (filterSource === 'All' || o.source === filterSource) &&
     (filterPayment === 'All' || o.paymentMethod === filterPayment)
   );
 
@@ -172,12 +170,6 @@ export default function OrdersPage() {
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
           <option value="deleted">Deleted</option>
-        </select>
-        <select className="border border-slate-300 bg-white text-sm p-2 rounded-md font-medium text-slate-700 outline-none focus:ring-2 focus:ring-slate-900" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-          <option value="All">All Sources</option>
-          <option value="pos">POS</option>
-          <option value="website">Website</option>
-          <option value="foodpanda">Foodpanda</option>
         </select>
         <select className="border border-slate-300 bg-white text-sm p-2 rounded-md font-medium text-slate-700 outline-none focus:ring-2 focus:ring-slate-900" value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}>
           <option value="All">All Payments</option>

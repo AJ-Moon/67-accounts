@@ -17,11 +17,22 @@ export default function ReportsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('summary');
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Fetch current user role
+  useEffect(() => {
+    fetch('/api/auth/role').then(r => r.json()).then(d => setUserRole(d.role));
+  }, []);
+
+  // Desk role is locked to today only
+  const isDesk = userRole === 'desk';
+  const effectiveRange = isDesk ? 'today' : range;
+
 
   const fetchReport = () => {
     setLoading(true);
-    let url = `/api/reports/accounting?range=${range}`;
-    if (range === 'custom' && startDate && endDate) {
+    let url = `/api/reports/accounting?range=${effectiveRange}`;
+    if (!isDesk && effectiveRange === 'custom' && startDate && endDate) {
       url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     
@@ -34,10 +45,11 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    if (range !== 'custom' || (startDate && endDate)) {
+    if (userRole === null) return; // wait for role to load
+    if (effectiveRange !== 'custom' || (startDate && endDate)) {
       fetchReport();
     }
-  }, [range, startDate, endDate]);
+  }, [effectiveRange, startDate, endDate, userRole]);
 
   const handleDownload = () => {
      window.print(); // Quick print integration for export MVP requirement
@@ -49,7 +61,7 @@ export default function ReportsPage() {
 
   const { currentBalances, salesReport, expensesReport, earningsReport, summary, ledger } = data;
 
-  const tabs = [
+  const allTabs = [
     { id: 'summary', label: 'Summary' },
     { id: 'sales', label: 'Sales' },
     { id: 'methods', label: 'Payment Methods' },
@@ -58,35 +70,41 @@ export default function ReportsPage() {
     { id: 'balances', label: 'Account Balances' },
     { id: 'ledger', label: 'Ledger Logs' },
   ];
+  // Desk only sees today's sales summary tabs
+  const tabs = isDesk
+    ? allTabs.filter(t => ['summary', 'sales', 'methods'].includes(t.id))
+    : allTabs;
 
   return (
     <div className="p-8 max-w-7xl mx-auto h-screen flex flex-col overflow-hidden">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 shrink-0 print:hidden">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financial Reports</h1>
-          <p className="text-slate-500 mt-1">Immutable ledger accounting and analytics</p>
+          <h1 className="text-3xl font-bold tracking-tight">{isDesk ? "Today's Sales Summary" : 'Financial Reports'}</h1>
+          <p className="text-slate-500 mt-1">{isDesk ? "Cash, card & payment breakdown for today" : 'Immutable ledger accounting and analytics'}</p>
         </div>
         
-        <div className="flex flex-col items-end gap-2">
-           <div className="flex bg-slate-100 p-1 rounded-lg">
-             {Object.entries({ today: 'Today', yesterday: 'Yesterday', week: 'This Week', month: 'This Month', lastMonth: 'Last Month', custom: 'Custom' }).map(([key, label]) => (
-               <button
-                 key={key}
-                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${range === key ? 'bg-white shadow text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-900'}`}
-                 onClick={() => setRange(key)}
-               >
-                 {label}
-               </button>
-             ))}
-           </div>
-           {range === 'custom' && (
-             <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-md">
-               <input type="date" className="p-1 text-xs border rounded-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
-               <span className="text-xs font-bold text-slate-400">to</span>
-               <input type="date" className="p-1 text-xs border rounded-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        {!isDesk && (
+          <div className="flex flex-col items-end gap-2">
+             <div className="flex bg-slate-100 p-1 rounded-lg">
+               {Object.entries({ today: 'Today', yesterday: 'Yesterday', week: 'This Week', month: 'This Month', lastMonth: 'Last Month', custom: 'Custom' }).map(([key, label]) => (
+                 <button
+                   key={key}
+                   className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${range === key ? 'bg-white shadow text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-900'}`}
+                   onClick={() => setRange(key)}
+                 >
+                   {label}
+                 </button>
+               ))}
              </div>
-           )}
-        </div>
+             {range === 'custom' && (
+               <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-md">
+                 <input type="date" className="p-1 text-xs border rounded-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                 <span className="text-xs font-bold text-slate-400">to</span>
+                 <input type="date" className="p-1 text-xs border rounded-sm" value={endDate} onChange={e => setEndDate(e.target.value)} />
+               </div>
+             )}
+          </div>
+        )}
       </div>
 
       {/* Tabs Navigation */}

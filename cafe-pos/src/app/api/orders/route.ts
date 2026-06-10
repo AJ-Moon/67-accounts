@@ -34,7 +34,13 @@ export async function POST(request: Request) {
     }
 
     const normalizedDiscount = discountPercentage === 20 ? 20 : 0;
-    const discountAmount = Number((computedSubtotal * normalizedDiscount / 100).toFixed(2));
+    // Discount only applies to non-combo-meal items
+    const discountableSubtotal = (items as any[]).reduce((sum: number, i: any) => {
+      const sub = (i.subcategory || i.sub_category || '').toLowerCase();
+      if (sub === 'combo meal') return sum;
+      return sum + (Number(i.price || 0) * Number(i.quantity || 0));
+    }, 0);
+    const discountAmount = Number((discountableSubtotal * normalizedDiscount / 100).toFixed(2));
     const finalTotal = Number(Math.max(0, computedSubtotal - discountAmount).toFixed(2));
 
     const orderItemsToValidate = items.map((i: any) => {
