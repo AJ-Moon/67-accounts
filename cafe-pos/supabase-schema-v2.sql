@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS public.settings CASCADE;
 -- 1. PROFILES TABLE (RBAC)
 CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'desk', 'outside')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'desk', 'staff')),
   display_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -41,6 +41,8 @@ CREATE TABLE public.items (
   variant TEXT,
   price NUMERIC NOT NULL,
   "isAvailable" BOOLEAN DEFAULT TRUE,
+  "allowUpsize" BOOLEAN DEFAULT FALSE,
+  "upsizePrice" NUMERIC DEFAULT 0,
   "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
