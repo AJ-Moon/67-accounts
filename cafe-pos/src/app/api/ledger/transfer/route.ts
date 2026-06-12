@@ -12,20 +12,20 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const json = await request.json();
-    const { sourceAccount, amount, note } = json;
+    const { sourceAccount, destinationAccount, amount, note } = json;
 
-    if (!sourceAccount || amount <= 0) {
+    if (!sourceAccount || !destinationAccount || amount <= 0) {
       return NextResponse.json({ error: 'Invalid transfer details' }, { status: 400 });
     }
 
     const { error: ledgerError } = await supabaseServer
       .from('ledger_transactions')
       .insert({
-         transactionType: 'earnings_transfer',
+         transactionType: destinationAccount === 'earnings' ? 'earnings_transfer' : 'interaccount_transfer',
          sourceAccount: sourceAccount,
-         destinationAccount: 'earnings',
+         destinationAccount: destinationAccount,
          amount: amount,
-         note: note || 'Commit to Earnings',
+         note: note || `Transfer: ${sourceAccount} to ${destinationAccount}`,
          createdBy: user.id
       });
 

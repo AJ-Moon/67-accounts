@@ -36,7 +36,8 @@ export async function GET() {
        transfer: 0,
        jazzcash: 0,
        foodpanda: 0,
-       earnings: 0
+       earnings: 0,
+       cash_holding: 0
     };
 
     validTransactions.forEach(t => {

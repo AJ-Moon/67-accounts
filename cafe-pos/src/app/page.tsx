@@ -49,7 +49,6 @@ export default function POSPage() {
   const [mainCategory, setMainCategory] = useState<string>('Drinks');
 
   const [applyDiscount, setApplyDiscount] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   
@@ -170,7 +169,6 @@ export default function POSPage() {
 
   const submitOrder = async (print: boolean) => {
     if (cart.length === 0) return toast.error("Cart is empty");
-    if (!paymentMethod) return toast.error("Please select a payment method");
     if (cart.some(item => item.price <= 0)) return toast.error("Cannot checkout items with 0 price");
     
     setIsProcessing(true);
@@ -180,7 +178,7 @@ export default function POSPage() {
         items: cart,
         subtotal,
         discountPercentage: applyDiscount ? 20 : 0,
-        paymentMethod,
+        paymentMethod: 'pending',
         printReceipts: print
       };
 
@@ -222,7 +220,6 @@ export default function POSPage() {
 
         setCart([]);
         setApplyDiscount(false);
-        setPaymentMethod('cash');
       } else {
         toast.error(resData.error || "Failed to save order");
       }
@@ -395,29 +392,9 @@ export default function POSPage() {
             </div>
           </div>
           
-          <div className="space-y-2 pt-1 border-t">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Payment Method *</Label>
-            <div className="grid grid-cols-5 gap-2">
-              {[
-                { label: 'Cash', value: 'cash' },
-                { label: 'Credit Card', value: 'credit_card' },
-                { label: 'Transfer', value: 'transfer' },
-                { label: 'JazzCash', value: 'jazzcash' },
-                { label: 'Foodpanda', value: 'foodpanda' }
-              ].map(m => (
-                <button
-                  key={m.value}
-                  onClick={() => setPaymentMethod(m.value)}
-                  className={`py-2 text-[10px] whitespace-nowrap font-bold rounded-lg border transition-all ${paymentMethod === m.value ? 'border-slate-900 bg-slate-900 text-white shadow-md' : 'border-slate-200 text-slate-600 hover:border-slate-400 bg-slate-50 shadow-sm'}`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <div className="grid grid-cols-3 gap-2 pt-2">
-             <Button variant="ghost" className="w-full font-bold h-10 text-red-600 hover:text-red-700 hover:bg-red-50" disabled={isProcessing || cart.length === 0} onClick={() => { setCart([]); setApplyDiscount(false); setPaymentMethod('cash'); }}>
+             <Button variant="ghost" className="w-full font-bold h-10 text-red-600 hover:text-red-700 hover:bg-red-50" disabled={isProcessing || cart.length === 0} onClick={() => { setCart([]); setApplyDiscount(false); }}>
               Cancel
              </Button>
              <Button variant="outline" className="w-full font-bold h-10 border-slate-300" disabled={isProcessing || cart.length === 0} onClick={() => submitOrder(false)}>

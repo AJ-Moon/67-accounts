@@ -44,6 +44,10 @@ export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterPayment, setFilterPayment] = useState('All');
 
+  const [completeOrderId, setCompleteOrderId] = useState<number | null>(null);
+  const [completePaymentMethod, setCompletePaymentMethod] = useState<string>('cash');
+  const [completeLoading, setCompleteLoading] = useState(false);
+
   const fetchOrders = () => {
     fetch('/api/orders')
       .then(res => res.json())
@@ -141,6 +145,29 @@ export default function OrdersPage() {
     }
   };
 
+  const performComplete = async () => {
+    if (!completeOrderId) return;
+    setCompleteLoading(true);
+    
+    const res = await fetch(`/api/orders/${completeOrderId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_status: 'completed', paymentMethod: completePaymentMethod }),
+    });
+    
+    setCompleteLoading(false);
+    
+    if (res.ok) {
+      toast.success("Order marked as completed");
+      setCompleteOrderId(null);
+      setCompletePaymentMethod('cash');
+      fetchOrders();
+    } else {
+      const err = await res.json();
+      toast.error(err.error || "Failed to update status");
+    }
+  };
+
   const StatusBadge = ({ status }: { status: string }) => {
     if (status === 'deleted' || status === 'cancelled') return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Cancelled</span>;
     if (status === 'completed') return <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Completed</span>;
@@ -220,7 +247,35 @@ export default function OrdersPage() {
                          <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => updateStatus(order.id, 'getting_ready')}>Start</Button>
                        )}
                        {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
-                         <Button size="sm" className="h-8 text-xs font-bold bg-green-600 hover:bg-green-700 text-white" onClick={() => updateStatus(order.id, 'completed')}>Complete</Button>
+                        <Dialog open={completeOrderId === order.id} onOpenChange={(open) => { if (!open) setCompleteOrderId(null); else setCompleteOrderId(order.id); }}>
+                          <DialogTrigger>
+                            <span className="inline-flex h-8 px-3 text-xs font-bold items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-md cursor-pointer transition-colors shadow-sm">Complete</span>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Complete Order #{order.orderNumber}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 pt-4">
+                              <div className="space-y-2">
+                                <Label>Payment Method</Label>
+                                <select className="w-full border border-slate-300 rounded p-2 text-sm" value={completePaymentMethod} onChange={(e) => setCompletePaymentMethod(e.target.value)}>
+                                  <option value="cash">Cash</option>
+                                  <option value="credit_card">Credit Card</option>
+                                  <option value="jazzcash">JazzCash</option>
+                                  <option value="foodpanda">Foodpanda</option>
+                                  <option value="transfer">Transfer</option>
+                                </select>
+                              </div>
+                              <Button 
+                                onClick={performComplete} 
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-10 shadow-sm mt-4"
+                                disabled={completeLoading}
+                              >
+                                {completeLoading ? 'Processing...' : 'Confirm & Complete'}
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                        )}
                       <Dialog>
                         <DialogTrigger>

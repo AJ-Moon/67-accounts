@@ -23,8 +23,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 });
     }
 
-    const validPaymentMethods = ['cash', 'credit_card', 'transfer', 'jazzcash', 'foodpanda'];
-    if (!validPaymentMethods.includes(paymentMethod)) {
+    const validPaymentMethods = ['pending', 'cash', 'credit_card', 'transfer', 'jazzcash', 'foodpanda'];
+    const resolvedPaymentMethod = paymentMethod || 'pending';
+    if (!validPaymentMethods.includes(resolvedPaymentMethod)) {
       return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
     }
 
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
         discountPercentage: normalizedDiscount,
         discountAmount,
         finalTotal,
-        paymentMethod,
+        paymentMethod: resolvedPaymentMethod,
         status: 'placed',
         createdBy: user?.id || null
       })

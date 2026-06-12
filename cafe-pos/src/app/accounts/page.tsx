@@ -30,6 +30,7 @@ export default function AccountsPage() {
   // Transfer State
   const [transferOpen, setTransferOpen] = useState(false);
   const [sourceAccount, setSourceAccount] = useState('cash');
+  const [destinationAccount, setDestinationAccount] = useState('earnings');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferNote, setTransferNote] = useState('');
   const [transferring, setTransferring] = useState(false);
@@ -62,11 +63,11 @@ export default function AccountsPage() {
     const res = await fetch('/api/ledger/transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceAccount, amount: Number(transferAmount), note: transferNote }),
+      body: JSON.stringify({ sourceAccount, destinationAccount, amount: Number(transferAmount), note: transferNote }),
     });
     setTransferring(false);
     if (res.ok) {
-      toast.success("Funds transferred to Earnings");
+      toast.success("Funds transferred successfully");
       setTransferOpen(false);
       fetchLedger();
     } else toast.error("Transfer failed");
@@ -94,6 +95,7 @@ export default function AccountsPage() {
     { key: 'transfer', label: 'Transfer' },
     { key: 'jazzcash', label: 'JazzCash' },
     { key: 'foodpanda', label: 'Foodpanda' },
+    { key: 'cash_holding', label: 'Cash Holding' }
   ];
 
   return (
@@ -104,21 +106,31 @@ export default function AccountsPage() {
           <p className="text-slate-500 mt-1">Manage finances, move to earnings, and record expenses</p>
         </div>
         <div className="flex gap-2">
-          {/* Transfer Transfer Modal */}
+          {/* Transfer Funds Modal */}
           <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
             <DialogTrigger>
-              <span className="inline-flex h-10 px-4 items-center justify-center rounded-md text-sm font-bold bg-slate-900 border text-white transition-colors cursor-pointer"><Banknote className="w-4 h-4 mr-2"/> Move to Earnings</span>
+              <span className="inline-flex h-10 px-4 items-center justify-center rounded-md text-sm font-bold bg-slate-900 border text-white transition-colors cursor-pointer"><Banknote className="w-4 h-4 mr-2"/> Move Funds</span>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Transfer Funds to Earnings</DialogTitle>
+                <DialogTitle>Transfer Funds</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label>Source Account</Label>
                   <Select value={sourceAccount} onValueChange={(val) => setSourceAccount(val || '')}>
-                    <SelectTrigger><SelectValue placeholder="Select Account" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select Source" /></SelectTrigger>
                     <SelectContent>
+                      {accountCards.map(a => <SelectItem key={a.key} value={a.key}>{a.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Destination Account</Label>
+                  <Select value={destinationAccount} onValueChange={(val) => setDestinationAccount(val || '')}>
+                    <SelectTrigger><SelectValue placeholder="Select Destination" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="earnings">Earnings</SelectItem>
                       {accountCards.map(a => <SelectItem key={a.key} value={a.key}>{a.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -131,7 +143,7 @@ export default function AccountsPage() {
                   <Label>Note (Optional)</Label>
                   <Input value={transferNote} onChange={e => setTransferNote(e.target.value)} />
                 </div>
-                <Button onClick={handleTransfer} disabled={transferring} className="w-full font-bold">Transfer to Earnings</Button>
+                <Button onClick={handleTransfer} disabled={transferring} className="w-full font-bold">Transfer Funds</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -232,6 +244,7 @@ export default function AccountsPage() {
                       {t.transactionType === 'sale' && <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Sale</span>}
                       {t.transactionType === 'expense' && <span className="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Expense</span>}
                       {t.transactionType === 'earnings_transfer' && <span className="bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Commit to Earnings</span>}
+                      {t.transactionType === 'interaccount_transfer' && <span className="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Transfer</span>}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 font-medium max-w-xs truncate">
                        {t.transactionType === 'sale' ? `Order payment (${t.sourceAccount ?? 'auto'})` : t.note}

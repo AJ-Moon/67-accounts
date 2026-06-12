@@ -13,7 +13,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     const json = await request.json();
-    const { new_status } = json;
+    const { new_status, paymentMethod } = json;
+
+    if (new_status === 'completed') {
+      const validPaymentMethods = ['cash', 'credit_card', 'transfer', 'jazzcash', 'foodpanda'];
+      if (!paymentMethod || !validPaymentMethods.includes(paymentMethod)) {
+        return NextResponse.json({ error: 'Valid payment method is required to complete an order.' }, { status: 400 });
+      }
+    }
 
     const validStatuses = ['placed', 'getting_ready', 'completed', 'cancelled'];
     if (!validStatuses.includes(new_status)) {
@@ -50,6 +57,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         updatePayload.deleteReason = 'Cancelled via Workflow Transition';
     }
 
+    if (new_status === 'completed') {
+        updatePayload.paymentMethod = paymentMethod;
+    }
+
     const { error: updateError } = await supabaseServer
       .from('orders')
       .update(updatePayload)
@@ -73,8 +84,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
               .from('ledger_transactions')
               .insert({
                 transactionType: 'sale',
-                destinationAccount: order.paymentMethod,
-                paymentMethod: order.paymentMethod,
+                destinationAccount: paymentMethod,
+                paymentMethod: paymentMethod,
                 amount: order.finalTotal,
                 orderId: order.id,
                 createdBy: user.id
