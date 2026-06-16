@@ -38,7 +38,7 @@ export default function Sidebar() {
     { label: 'Menu Items', icon: Coffee, href: '/menu', roles: ['admin', 'desk', 'outside'] },
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', roles: ['admin'] },
     { label: 'Accounts / Ledger', icon: ArrowLeftRight, href: '/accounts', roles: ['admin'] },
-    { label: 'Reports', icon: FileText, href: '/reports', roles: ['admin'] },
+    { label: 'Reports', icon: FileText, href: '/reports', roles: ['admin', 'desk'] },
     { label: 'Settings', icon: Settings, href: '/settings', roles: ['admin'] },
   ].filter(r => !role || r.roles.includes(role));
 
