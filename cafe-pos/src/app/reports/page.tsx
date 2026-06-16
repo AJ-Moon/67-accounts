@@ -59,7 +59,7 @@ export default function ReportsPage() {
      return <div className="flex h-screen items-center justify-center text-slate-500 font-bold uppercase tracking-widest animate-pulse">Computing Ledgers...</div>;
   }
 
-  const { currentBalances, salesReport, expensesReport, earningsReport, summary, ledger } = data;
+  const { currentBalances, dailyBalances, salesReport, expensesReport, earningsReport, summary, ledger } = data;
 
   const allTabs = [
     { id: 'summary', label: 'Summary' },
@@ -212,33 +212,40 @@ export default function ReportsPage() {
                 const salesGen = (salesReport.byMethod[m] as number) || 0;
                 const expensesPaid = (expensesReport.byAccount[m] as number) || 0;
                 const earningsMoved = (earningsReport.breakdownSource[m] as number) || 0;
-                const liveBalance = currentBalances[m].current;
-                
-                return (
-                 <Card key={m} className="border-t-4 border-t-slate-800">
-                    <CardHeader className="pb-2 border-b">
-                      <CardTitle className="text-lg uppercase tracking-wider">{m.replace('_', ' ')} Register</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4 space-y-4">
-                       <div className="flex justify-between p-2 rounded bg-green-50">
-                          <span className="text-sm font-semibold text-green-800">Total Sales Collected</span>
-                          <span className="font-bold text-green-900">{formatCurrency(salesGen)}</span>
-                       </div>
-                       <div className="flex justify-between px-2 text-sm text-slate-600">
-                          <span>Moved to Earnings</span>
-                          <span className="font-bold">-{formatCurrency(earningsMoved)}</span>
-                       </div>
-                       <div className="flex justify-between px-2 text-sm text-slate-600">
-                          <span>Expenses Paid Directly</span>
-                          <span className="font-bold">-{formatCurrency(expensesPaid)}</span>
-                       </div>
-                       <div className="flex justify-between p-2 rounded bg-slate-100 border mt-2">
-                          <span className="text-sm font-black uppercase tracking-wider text-slate-800">Live Global Balance</span>
-                          <span className="font-black text-slate-900">{formatCurrency(liveBalance)}</span>
-                       </div>
-                    </CardContent>
-                 </Card>
-                )
+                 const liveBalance = currentBalances[m].current;
+                 const dailyBalance = dailyBalances ? dailyBalances[m].current : 0;
+                 
+                 return (
+                  <Card key={m} className="border-t-4 border-t-slate-800">
+                     <CardHeader className="pb-2 border-b">
+                       <CardTitle className="text-lg uppercase tracking-wider">{m.replace('_', ' ')} Register</CardTitle>
+                     </CardHeader>
+                     <CardContent className="pt-4 space-y-4">
+                        <div className="flex justify-between p-2 rounded bg-green-50">
+                           <span className="text-sm font-semibold text-green-800">Total Sales Collected</span>
+                           <span className="font-bold text-green-900">{formatCurrency(salesGen)}</span>
+                        </div>
+                        <div className="flex justify-between px-2 text-sm text-slate-600">
+                           <span>Moved to Earnings</span>
+                           <span className="font-bold">-{formatCurrency(earningsMoved)}</span>
+                        </div>
+                        <div className="flex justify-between px-2 text-sm text-slate-600">
+                           <span>Expenses Paid Directly</span>
+                           <span className="font-bold">-{formatCurrency(expensesPaid)}</span>
+                        </div>
+                        <div className="flex justify-between p-2 rounded bg-blue-50 border border-blue-200 mt-2">
+                           <span className="text-sm font-black uppercase tracking-wider text-blue-900">Today's Net Balance</span>
+                           <span className="font-black text-blue-900">{formatCurrency(dailyBalance)}</span>
+                        </div>
+                        {!isDesk && (
+                        <div className="flex justify-between p-2 rounded bg-slate-100 border mt-2">
+                           <span className="text-sm font-black uppercase tracking-wider text-slate-800">Live Global Balance</span>
+                           <span className="font-black text-slate-900">{formatCurrency(liveBalance)}</span>
+                        </div>
+                        )}
+                     </CardContent>
+                  </Card>
+                 )
              })}
           </div>
         )}

@@ -4,28 +4,32 @@ import { createClient } from '@/utils/supabase/server';
 export const dynamic = 'force-dynamic'; // Prevent aggressive static caching
 
 function getDateBounds(range: string, customStart?: string, customEnd?: string) {
-  const now = new Date();
-  let start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  // Business day ends at 1:30 AM, so we shift time back by 4 hours to determine the current logical date.
+  const realNow = new Date();
+  const businessNow = new Date(realNow.getTime() - 4 * 60 * 60 * 1000);
+
+  // Business day starts at 4:00 AM of the logical date and ends at 3:59:59 AM of the next date.
+  let start = new Date(businessNow.getFullYear(), businessNow.getMonth(), businessNow.getDate(), 4, 0, 0, 0);
+  let end = new Date(businessNow.getFullYear(), businessNow.getMonth(), businessNow.getDate() + 1, 3, 59, 59, 999);
 
   if (range === 'yesterday') {
     start.setDate(start.getDate() - 1);
     end.setDate(end.getDate() - 1);
   } else if (range === 'week') {
     // start of week (Sunday)
-    start.setDate(start.getDate() - start.getDay());
+    start.setDate(start.getDate() - businessNow.getDay());
   } else if (range === 'month') {
     // start of month
     start.setDate(1);
   } else if (range === 'lastMonth') {
     start.setMonth(start.getMonth() - 1);
     start.setDate(1);
-    end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 1, 3, 59, 59, 999);
   } else if (range === 'custom' && customStart && customEnd) {
-    start = new Date(customStart);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(customEnd);
-    end.setHours(23, 59, 59, 999);
+    const sDate = new Date(customStart);
+    start = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate(), 4, 0, 0, 0);
+    const eDate = new Date(customEnd);
+    end = new Date(eDate.getFullYear(), eDate.getMonth(), eDate.getDate() + 1, 3, 59, 59, 999);
   }
   return { startDate: start, endDate: end };
 }
@@ -95,6 +99,14 @@ export async function GET(request: Request) {
       return acc;
     }, {} as Record<string, {incoming: number; outgoing: number; current: number}>);
 
+    // DAILY BALANCES (Scoped to date range)
+    const dailyBalances = accountsList.reduce((acc, acct) => {
+      const incoming = scopedLedger.filter((t: any) => t.destinationAccount === acct).reduce((sum, t) => sum + Number(t.amount), 0);
+      const outgoing = scopedLedger.filter((t: any) => t.sourceAccount === acct).reduce((sum, t) => sum + Number(t.amount), 0);
+      acc[acct] = { incoming, outgoing, current: incoming - outgoing };
+      return acc;
+    }, {} as Record<string, {incoming: number; outgoing: number; current: number}>);
+
     // B. SALES REPORT (Scoped)
     const salesReport = {
       totalSales: orders.reduce((sum, o) => sum + Number(o.finalTotal), 0),
@@ -151,6 +163,7 @@ export async function GET(request: Request) {
       startDate: isoStart,
       endDate: isoEnd,
       currentBalances,
+      dailyBalances,
       salesReport,
       expensesReport,
       earningsReport,

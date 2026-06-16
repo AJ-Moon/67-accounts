@@ -2,22 +2,24 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 function getRangeDates(range: string, startDate?: string, endDate?: string) {
-  const now = new Date();
-  const start = new Date(now);
-  let finish = new Date(now);
+  // Business day ends at 1:30 AM, shift by 4 hours
+  const realNow = new Date();
+  const businessNow = new Date(realNow.getTime() - 4 * 60 * 60 * 1000);
+  
+  let start = new Date(businessNow.getFullYear(), businessNow.getMonth(), businessNow.getDate(), 4, 0, 0, 0);
+  let finish = new Date(businessNow.getFullYear(), businessNow.getMonth(), businessNow.getDate() + 1, 3, 59, 59, 999);
 
   if (range === 'custom' && startDate && endDate) {
-    const gte = new Date(startDate);
-    const lte = new Date(endDate);
-    lte.setHours(23, 59, 59, 999);
+    const sDate = new Date(startDate);
+    const gte = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate(), 4, 0, 0, 0);
+    const eDate = new Date(endDate);
+    const lte = new Date(eDate.getFullYear(), eDate.getMonth(), eDate.getDate() + 1, 3, 59, 59, 999);
     return { gte, lte };
   }
 
   if (range === 'yesterday') {
     start.setDate(start.getDate() - 1);
-    start.setHours(0, 0, 0, 0);
-    finish = new Date(start);
-    finish.setHours(23, 59, 59, 999);
+    finish.setDate(finish.getDate() - 1);
     return { gte: start, lte: finish };
   }
 
@@ -25,31 +27,21 @@ function getRangeDates(range: string, startDate?: string, endDate?: string) {
     const day = start.getDay();
     const diff = start.getDate() - day + (day === 0 ? -6 : 1);
     start.setDate(diff);
-    start.setHours(0, 0, 0, 0);
-    finish.setHours(23, 59, 59, 999);
     return { gte: start, lte: finish };
   }
 
   if (range === 'month') {
     start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    finish.setHours(23, 59, 59, 999);
     return { gte: start, lte: finish };
   }
 
   if (range === 'previousMonth') {
     start.setDate(1);
     start.setMonth(start.getMonth() - 1);
-    start.setHours(0, 0, 0, 0);
-    finish = new Date(start);
-    finish.setMonth(finish.getMonth() + 1);
-    finish.setDate(0);
-    finish.setHours(23, 59, 59, 999);
+    finish = new Date(start.getFullYear(), start.getMonth() + 1, 1, 3, 59, 59, 999);
     return { gte: start, lte: finish };
   }
 
-  start.setHours(0, 0, 0, 0);
-  finish.setHours(23, 59, 59, 999);
   return { gte: start, lte: finish };
 }
 
