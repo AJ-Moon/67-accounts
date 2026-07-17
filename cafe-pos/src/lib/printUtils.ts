@@ -15,6 +15,33 @@ export function centerText(text: string, width = 48) {
   return ' '.repeat(pad) + text + ' '.repeat(width - text.length - pad);
 }
 
+/**
+ * Options may live in the selectedOptions column OR embedded as JSON at the
+ * end of notes ("free text | {"upsize":true}"). Normalize both.
+ */
+function getOptions(item: any): { upsize?: boolean; option?: string; [k: string]: any } {
+  if (item.selectedOptions && typeof item.selectedOptions === 'object') return item.selectedOptions;
+  const m = (item.notes || '').match(/\{.*\}\s*$/);
+  if (m) { try { return JSON.parse(m[0]); } catch { /* not json */ } }
+  return {};
+}
+
+/** Human note only — strips any embedded options JSON. */
+function getPlainNote(item: any): string {
+  return (item.notes || '').replace(/\s*\|?\s*\{.*\}\s*$/, '').trim();
+}
+
+/** Item extras block: upsize ONLY when true, option, then clean note. */
+function itemExtras(item: any): string {
+  const opts = getOptions(item);
+  const note = getPlainNote(item);
+  let out = '';
+  if (opts.upsize === true) out += `   + UPSIZE\n`;
+  if (opts.option) out += `   + ${opts.option}\n`;
+  if (note) out += `   Note: ${note}\n`;
+  return out;
+}
+
 export function buildReceiptCopies(order: any, settings: any, isReprint = false) {
   const WIDTH = 48;
   const copies: any[] = [];
@@ -28,12 +55,25 @@ export function buildReceiptCopies(order: any, settings: any, isReprint = false)
   const getCategory = (i: any) => (i.category || i.item_category || '').toLowerCase();
 
   const drinks  = order.items.filter((i: any) => getCategory(i) === 'drinks');
-  const kitchen = order.items.filter((i: any) => {
-    const cat = getCategory(i);
-    return cat === 'food' || cat === 'desserts';
-  });
+  const kitchen = order.items.filter((i: any) => getCategory(i) !== 'drinks');
 
-  const divider   = '-'.repeat(WIDTH) + '\n';
+  const divider = '-'.repeat(WIDTH) + '\n';
+
+  const totalsBlock = () => {
+    let out = '';
+    const hasBreakdown = Number(order.discountAmount || 0) > 0 || Number(order.tax || 0) > 0;
+    if (hasBreakdown) {
+      out += padText('Subtotal', formatCurrencyString(Number(order.subtotal || 0)), WIDTH) + '\n';
+      if (Number(order.discountAmount || 0) > 0) {
+        out += padText(`Discount${order.discountPercentage ? ` (${order.discountPercentage}%)` : ''}`, `-${formatCurrencyString(Number(order.discountAmount))}`, WIDTH) + '\n';
+      }
+      if (Number(order.tax || 0) > 0) {
+        out += padText(`Tax${order.taxRate ? ` (${order.taxRate}%)` : ''}`, formatCurrencyString(Number(order.tax)), WIDTH) + '\n';
+      }
+    }
+    out += padText('TOTAL', formatCurrencyString(Number(order.finalTotal || 0)), WIDTH) + '\n';
+    return out;
+  };
 
   // ── CUSTOMER COPY ────────────────────────────────────
   let customer = '';
@@ -50,16 +90,11 @@ export function buildReceiptCopies(order: any, settings: any, isReprint = false)
 
   order.items.forEach((item: any) => {
     customer += padText(`${item.quantity}x ${item.name}`, formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
-    if (item.selectedOptions?.upsize)  customer += `   + Upsize\n`;
-    if (item.selectedOptions?.option)  customer += `   + ${item.selectedOptions.option}\n`;
+    customer += itemExtras(item);
   });
 
   customer += divider;
-  if (order.discountAmount > 0) {
-    customer += padText('Subtotal', formatCurrencyString(order.subtotal), WIDTH) + '\n';
-    customer += padText('Discount', `-${formatCurrencyString(order.discountAmount)}`, WIDTH) + '\n';
-  }
-  customer += padText('TOTAL', formatCurrencyString(order.finalTotal), WIDTH) + '\n';
+  customer += totalsBlock();
   customer += divider;
   if (settings?.footerMessage) customer += '\n' + centerText(settings.footerMessage) + '\n';
   customer += '\n\n';
@@ -79,15 +114,10 @@ export function buildReceiptCopies(order: any, settings: any, isReprint = false)
 
   order.items.forEach((item: any) => {
     shop += padText(`${item.quantity}x ${item.name}`, formatCurrencyString(item.price * item.quantity), WIDTH) + '\n';
-    if (item.selectedOptions?.upsize) shop += `   + Upsize\n`;
-    if (item.selectedOptions?.option) shop += `   + ${item.selectedOptions.option}\n`;
+    shop += itemExtras(item);
   });
   shop += divider;
-  if (order.discountAmount > 0) {
-    shop += padText('Subtotal', formatCurrencyString(order.subtotal), WIDTH) + '\n';
-    shop += padText('Discount', `-${formatCurrencyString(order.discountAmount)}`, WIDTH) + '\n';
-  }
-  shop += padText('TOTAL', formatCurrencyString(order.finalTotal), WIDTH) + '\n';
+  shop += totalsBlock();
   shop += '\n\n';
 
   copies.push({ type: 'shop', content: shop });
@@ -102,9 +132,7 @@ export function buildReceiptCopies(order: any, settings: any, isReprint = false)
 
     drinks.forEach((item: any) => {
       bar += `${item.quantity}x ${item.name}\n`;
-      if (item.selectedOptions?.upsize) bar += `   + Upsize\n`;
-      if (item.selectedOptions?.option) bar += `   + ${item.selectedOptions.option}\n`;
-      if (item.notes) bar += `   Note: ${item.notes}\n`;
+      bar += itemExtras(item);
     });
     bar += '\n\n';
     copies.push({ type: 'bar', content: bar });
@@ -120,9 +148,7 @@ export function buildReceiptCopies(order: any, settings: any, isReprint = false)
 
     kitchen.forEach((item: any) => {
       kitch += `${item.quantity}x ${item.name}\n`;
-      if (item.selectedOptions?.upsize) kitch += `   + Upsize\n`;
-      if (item.selectedOptions?.option) kitch += `   + ${item.selectedOptions.option}\n`;
-      if (item.notes) kitch += `   Note: ${item.notes}\n`;
+      kitch += itemExtras(item);
     });
     kitch += '\n\n';
     copies.push({ type: 'kitchen', content: kitch });

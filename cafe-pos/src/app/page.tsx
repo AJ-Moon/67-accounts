@@ -55,6 +55,22 @@ export default function POSPage() {
   const [search, setSearch] = useState('');
   const [optionItem, setOptionItem] = useState<Item | null>(null);
 
+  // Tax preview (previewed at cash rate; finalized at completion)
+  const [taxCfg, setTaxCfg] = useState<{ enabled: boolean; inclusive: boolean; cashRate: number }>({ enabled: false, inclusive: false, cashRate: 0 });
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/settings').then(r => r.json()).catch(() => null),
+      fetch('/api/tax-rates').then(r => r.json()).catch(() => []),
+    ]).then(([s, rates]) => {
+      const cash = Array.isArray(rates) ? rates.find((r: any) => r.paymentMethod === 'cash') : null;
+      setTaxCfg({
+        enabled: s?.taxEnabled === true,
+        inclusive: s?.taxInclusive === true,
+        cashRate: Number(cash?.rate || 0),
+      });
+    });
+  }, []);
+
   useEffect(() => {
     fetch('/api/items')
       .then(res => res.json())
@@ -148,7 +164,11 @@ export default function POSPage() {
     .filter(item => (item.subcategory || '').toLowerCase() !== 'combo meal')
     .reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discountAmount = applyDiscount ? discountableSubtotal * 0.20 : 0;
-  const total = Math.max(0, subtotal - discountAmount);
+  const taxable = Math.max(0, subtotal - discountAmount);
+  const previewTax = taxCfg.enabled && taxCfg.cashRate > 0
+    ? (taxCfg.inclusive ? taxable - taxable / (1 + taxCfg.cashRate / 100) : taxable * taxCfg.cashRate / 100)
+    : 0;
+  const total = taxCfg.inclusive ? taxable : taxable + previewTax;
 
   const mainCategories = Array.from(new Set(items.map(i => i.category))).filter(Boolean);
   
@@ -385,11 +405,21 @@ export default function POSPage() {
                  <span>-{formatCurrency(discountAmount)}</span>
                </div>
             )}
-            
+
+            {taxCfg.enabled && previewTax > 0 && (
+               <div className="flex justify-between items-center text-slate-600">
+                 <span>Tax ({taxCfg.cashRate}%{taxCfg.inclusive ? ' incl.' : ''})*</span>
+                 <span>{formatCurrency(previewTax)}</span>
+               </div>
+            )}
+
             <div className="pt-3 border-t flex justify-between items-end mt-2">
               <span className="font-bold text-slate-900 text-sm">Total Payable</span>
               <span className="text-2xl font-black text-amber-600">{formatCurrency(total)}</span>
             </div>
+            {taxCfg.enabled && (
+              <p className="text-[10px] text-slate-400">*Tax preview at cash rate — final tax follows the payment method at completion.</p>
+            )}
           </div>
           
 

@@ -11,23 +11,63 @@ import { toast } from "sonner";
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<any>({
     shopName: '',
     address: '',
     phone: '',
     footerMessage: '',
     printerType: 'USB',
-    printerAddress: ''
+    printerAddress: '',
+    taxEnabled: false,
+    taxInclusive: false,
   });
+  const [taxRates, setTaxRates] = useState<any[]>([]);
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [newKeyName, setNewKeyName] = useState('');
+
+  const loadKeys = () => fetch('/api/keys').then(r => r.json()).then(d => { if (Array.isArray(d)) setApiKeys(d); });
 
   useEffect(() => {
     fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
-        if (data) setSettings(data);
+        if (data) setSettings((s: any) => ({ ...s, ...data }));
         setLoading(false);
       });
+    fetch('/api/tax-rates').then(r => r.json()).then(d => { if (Array.isArray(d)) setTaxRates(d); });
+    loadKeys();
   }, []);
+
+  const saveTaxRates = async () => {
+    const res = await fetch('/api/tax-rates', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rates: taxRates }),
+    });
+    if (res.ok) toast.success('Tax rates saved'); else toast.error('Failed to save tax rates');
+  };
+
+  const createKey = async () => {
+    if (!newKeyName.trim()) return toast.error('Give the key a name (e.g. Website)');
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newKeyName.trim() }),
+    });
+    const j = await res.json();
+    if (res.ok) { toast.success('API key created'); setNewKeyName(''); loadKeys(); }
+    else toast.error(j.error || 'Failed to create key');
+  };
+
+  const revokeKey = async (id: string) => {
+    if (!confirm('Revoke this key? Apps using it will stop working.')) return;
+    const res = await fetch('/api/keys', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) { toast.success('Key revoked'); loadKeys(); }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -133,6 +173,81 @@ export default function SettingsPage() {
                 onChange={(e) => setSettings({...settings, footerMessage: e.target.value})} 
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Tax & Billing</CardTitle>
+            <CardDescription>Tax rate depends on the payment method (e.g. 16% cash / 5% card).</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>Tax on bills</Label>
+                <Select value={String(settings.taxEnabled)} onValueChange={v => setSettings({ ...settings, taxEnabled: v === 'true' })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Enabled</SelectItem>
+                    <SelectItem value="false">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Price mode</Label>
+                <Select value={String(settings.taxInclusive)} onValueChange={v => setSettings({ ...settings, taxInclusive: v === 'true' })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">Tax added on top of prices</SelectItem>
+                    <SelectItem value="true">Prices already include tax</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {settings.taxEnabled && (
+              <div className="space-y-2 pt-2">
+                <Label className="text-slate-600">Rates per payment method (%)</Label>
+                {taxRates.map((r, idx) => (
+                  <div key={r.paymentMethod} className="flex items-center gap-3">
+                    <span className="w-32 text-sm font-medium capitalize">{r.paymentMethod.replace('_', ' ')}</span>
+                    <Input type="number" step="0.5" min="0" max="100" className="w-28"
+                      value={r.rate}
+                      onChange={e => setTaxRates(rs => rs.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} />
+                  </div>
+                ))}
+                <Button variant="outline" onClick={saveTaxRates} className="mt-2">Save Tax Rates</Button>
+                <p className="text-xs text-slate-500">Note: tax is finalized using the payment method chosen when the order is completed.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>API Keys</CardTitle>
+            <CardDescription>Connect your website or apps. Send the key in the <code>x-api-key</code> header. See API.md for endpoints.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input placeholder="Key name, e.g. Website" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
+              <Button onClick={createKey}>Generate Key</Button>
+            </div>
+            {apiKeys.length > 0 && (
+              <div className="space-y-2">
+                {apiKeys.map(k => (
+                  <div key={k.id} className={`flex items-center justify-between gap-2 rounded border p-2 ${!k.isActive ? 'opacity-50' : ''}`}>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{k.name} {!k.isActive && <span className="text-xs text-red-500">(revoked)</span>}</div>
+                      <div className="text-xs font-mono text-slate-500 truncate">{k.key}</div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(k.key); toast.success('Copied'); }}>Copy</Button>
+                      {k.isActive && <Button variant="destructive" size="sm" onClick={() => revokeKey(k.id)}>Revoke</Button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

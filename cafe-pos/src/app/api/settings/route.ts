@@ -31,6 +31,8 @@ export async function PUT(request: Request) {
           footerMessage: json.footerMessage,
           printerType: json.printerType,
           printerAddress: json.printerAddress,
+          taxEnabled: json.taxEnabled === true,
+          taxInclusive: json.taxInclusive === true,
         })
         .eq('id', existing.id)
         .select()
@@ -47,6 +49,8 @@ export async function PUT(request: Request) {
           footerMessage: json.footerMessage,
           printerType: json.printerType,
           printerAddress: json.printerAddress,
+          taxEnabled: json.taxEnabled === true,
+          taxInclusive: json.taxInclusive === true,
         })
         .select()
         .single();

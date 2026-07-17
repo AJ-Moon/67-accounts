@@ -1,5 +1,30 @@
 import { printer as ThermalPrinter, types as PrinterTypes } from 'node-thermal-printer';
-import { Order, OrderItem, Settings } from '@prisma/client';
+// Local shapes (previously imported from @prisma/client — app now runs on Supabase)
+type OrderItem = {
+  name: string;
+  category: string;
+  quantity: number;
+  price: number;
+  notes: string | null;
+  [key: string]: any;
+};
+type Order = {
+  orderNumber: string;
+  createdAt: string | Date;
+  subtotal: number;
+  finalTotal: number;
+  paymentMethod: string;
+  [key: string]: any;
+};
+type Settings = {
+  shopName: string;
+  address?: string | null;
+  phone?: string | null;
+  footerMessage?: string | null;
+  printerType?: string | null;
+  printerAddress?: string | null;
+  [key: string]: any;
+};
 import { formatCurrency } from './utils';
 import fs from 'fs';
 import { exec } from 'child_process';

@@ -1,25 +1,34 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { createClient } from '@/utils/supabase/server'; // Admin bypass optionally
+import { validateApiKey } from '@/lib/apiAuth';
+import { getTaxConfig, computeTotals } from '@/lib/tax';
+import { deductForOrder } from '@/lib/inventory';
+import { buildOrderLines, generateOrderNumber, isValidPaymentMethod } from '@/lib/orders';
 
+/**
+ * POST /api/external/orders — create an order from a website or app.
+ * Headers: x-api-key
+ * Body: {
+ *   items: [{ menu_item_id?, name, unit_price, quantity, category?, notes?, selected_options? }],
+ *   payment_method, order_type?, customer?: { name?, phone? },
+ *   discount_percentage?, notes?
+ * }
+ * Totals & tax are computed server-side — client totals are ignored.
+ */
 export async function POST(request: Request) {
   try {
-    const apiKey = request.headers.get('x-api-key');
-    const requiredKey = process.env.EXTERNAL_ORDER_API_KEY;
-
-    if (!apiKey || !requiredKey || apiKey !== requiredKey) {
-      return NextResponse.json({ error: 'Unauthorized: Invalid or missing API Key' }, { status: 401 });
-    }
+    const auth = await validateApiKey(request);
+    if (!auth.ok) return NextResponse.json({ error: 'Unauthorized: Invalid or missing API Key' }, { status: 401 });
 
     const payload = await request.json();
-    const { items, totals, order_type, customer, delivery_address, notes, payment_method } = payload;
+    const { items, order_type, customer, payment_method, discount_percentage } = payload;
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Validation Error: Items array is missing or empty' }, { status: 400 });
     }
 
-    const validPaymentMethods = ['cash', 'credit_card', 'transfer', 'jazzcash', 'foodpanda'];
-    if (!validPaymentMethods.includes(payment_method)) {
+    const paymentMethod = payment_method || 'pending';
+    if (!(await isValidPaymentMethod(paymentMethod))) {
       return NextResponse.json({ error: 'Validation Error: Invalid payment_method' }, { status: 400 });
     }
 
@@ -28,28 +37,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Validation Error: Invalid order_type' }, { status: 400 });
     }
 
-    const computedTotal = Number(totals?.total || 0);
-    if (computedTotal <= 0) {
+    // Resolve items against the menu when menu_item_id is given (authoritative price/category)
+    const ids = items.map((i: any) => i.menu_item_id).filter(Boolean);
+    let menuMap: Record<string, any> = {};
+    if (ids.length > 0) {
+      const { data: menuItems } = await supabase.from('items').select('*').in('id', ids);
+      (menuItems || []).forEach((m: any) => { menuMap[String(m.id)] = m; });
+    }
+
+    let orderLines;
+    try {
+      orderLines = buildOrderLines(items.map((i: any) => {
+        const m = i.menu_item_id ? menuMap[String(i.menu_item_id)] : null;
+        const upsized = i.selected_options?.upsize === true;
+        const basePrice = m ? Number(m.price) + (upsized ? Number(m.upsizePrice || 0) : 0) : Number(i.unit_price || 0);
+        return {
+          id: m?.id || null,
+          name: m?.name || i.name,
+          category: m?.category || i.category || 'Food',
+          subcategory: m?.subcategory || i.subcategory || null,
+          price: basePrice,
+          quantity: Number(i.quantity || 1),
+          notes: i.notes || '',
+          selectedOptions: i.selected_options || null,
+        };
+      }));
+    } catch {
+      return NextResponse.json({ error: 'Validation Error: Invalid item data' }, { status: 400 });
+    }
+
+    const taxCfg = await getTaxConfig();
+    const totals = computeTotals(
+      { items: orderLines, discountPercentage: discount_percentage || 0, paymentMethod },
+      taxCfg
+    );
+    if (totals.subtotal <= 0) {
       return NextResponse.json({ error: 'Validation Error: Total must be greater than zero' }, { status: 400 });
     }
 
-    // Since we are Server-Side and Vercel ENV keys are protected, we can map direct Supabase inserts securely. 
-    // Usually we would use service_role here if RLS blocking inserts. We'll use the anon client since RLS permits inserts natively in this schema so long as service bypass if necessary.
-    // In our case, the DB might restrict it, so let's use the standard supabase admin route abstraction when required, or just use the local anon `supabase`.
-    // Let's assume `supabase` proxy is fine.
-    
-    // 1. GENERATE ORDER NUMBER
-    const today = new Date();
-    const prefix = `ORD-${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
-    const { count, error: countError } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .like('orderNumber', `${prefix}%`);
-    if (countError) throw countError;
-    const countToday = count || 0;
-    const orderNumber = `${prefix}-${(countToday + 1).toString().padStart(3, '0')}`;
+    const orderNumber = await generateOrderNumber();
 
-    // 2. BUILD ORDER
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
@@ -59,50 +86,41 @@ export async function POST(request: Request) {
         customerName: customer?.name || null,
         customerPhone: customer?.phone || null,
         orderType: order_type || 'online',
-        paymentMethod: payment_method,
-        subtotal: Number(totals?.subtotal || computedTotal),
-        discount: Number(totals?.discount || 0),
-        tax: Number(totals?.tax || 0),
-        finalTotal: computedTotal,
+        paymentMethod,
+        subtotal: totals.subtotal,
+        discount: totals.discountAmount,
+        discountPercentage: totals.discountPercentage,
+        discountAmount: totals.discountAmount,
+        tax: totals.tax,
+        taxRate: totals.taxRate,
+        finalTotal: totals.finalTotal,
       })
       .select()
       .single();
 
-    if (orderError || !order) {
-      throw new Error(`Failed to map root order: ${orderError?.message}`);
-    }
+    if (orderError || !order) throw new Error(`Failed to create order: ${orderError?.message}`);
 
-    // 3. MAP ITEMS
-    const orderItems = items.map((i: any) => ({
-        orderId: order.id,
-        itemId: i.menu_item_id ? Number(i.menu_item_id) : null,
-        name: i.name,
-        category: 'Drinks', // Defaulted or mapped
-        price: Number(i.unit_price || 0),
-        quantity: Number(i.quantity || 1),
-        selectedOptions: i.selected_options || {},
-        notes: i.notes || ''
-    }));
+    const orderItems = orderLines.map((i: any) => ({ ...i, orderId: order.id }));
+    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+    if (itemsError) console.error('Failed to insert external order items:', itemsError);
 
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems);
+    await deductForOrder(orderItems, order.id);
 
-    if (itemsError) {
-      console.error("Failed to map API Items:", itemsError);
-    }
-
-    // DELIVER SAFE PAYLOAD 
     return NextResponse.json({
       success: true,
       order_id: order.id,
       order_number: order.orderNumber,
       status: 'placed',
-      source: 'website'
+      totals: {
+        subtotal: totals.subtotal,
+        discount: totals.discountAmount,
+        tax: totals.tax,
+        tax_rate: totals.taxRate,
+        total: totals.finalTotal,
+      },
     });
-
-  } catch (err: any) {
-    console.error("External API Gateway Error:", err);
+  } catch (err) {
+    console.error('External API Gateway Error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

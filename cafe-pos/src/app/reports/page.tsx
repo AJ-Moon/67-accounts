@@ -5,10 +5,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from '@/lib/utils';
-import { 
-  Download, Calendar, Coins, CreditCard, Landmark, TrendingUp, XCircle, 
-  ShoppingBag, Pickaxe, Banknote, ArrowUpRight, ArrowDownRight, Activity 
+import {
+  Download, Calendar, Coins, CreditCard, Landmark, TrendingUp, XCircle,
+  ShoppingBag, Pickaxe, Banknote, ArrowUpRight, ArrowDownRight, Activity, FileDown
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { downloadReportPdf } from '@/lib/pdfReports';
+
+const PDF_TYPES = [
+  { value: 'sales_daily', label: 'Sales by Day' },
+  { value: 'sales_monthly', label: 'Sales by Month' },
+  { value: 'sales_orders', label: 'All Orders (detailed)' },
+  { value: 'ledger', label: 'Ledger Entries' },
+  { value: 'expenses', label: 'Expenses' },
+  { value: 'wastage', label: 'Wastage' },
+] as const;
 
 export default function ReportsPage() {
   const [range, setRange] = useState('today');
@@ -53,6 +64,23 @@ export default function ReportsPage() {
 
   const handleDownload = () => {
      window.print(); // Quick print integration for export MVP requirement
+  };
+
+  const [pdfType, setPdfType] = useState('sales_daily');
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const handlePdf = async () => {
+    setPdfBusy(true);
+    try {
+      // Use the selected custom dates when present; API defaults to current month
+      await downloadReportPdf(pdfType as any, {
+        from: range === 'custom' && startDate ? startDate : undefined,
+        to: range === 'custom' && endDate ? endDate : undefined,
+      });
+      toast.success('PDF downloaded');
+    } catch (e: any) {
+      toast.error(e?.message || 'PDF export failed');
+    }
+    setPdfBusy(false);
   };
 
   if (loading || !data) {
@@ -118,7 +146,17 @@ export default function ReportsPage() {
             {tab.label}
           </button>
         ))}
-        <div className="ml-auto flex items-center pr-2 pb-2">
+        <div className="ml-auto flex items-center gap-2 pr-2 pb-2">
+            {!isDesk && (
+              <>
+                <select className="border border-slate-300 bg-white text-xs font-bold p-1.5 rounded-md text-slate-700" value={pdfType} onChange={e => setPdfType(e.target.value)}>
+                  {PDF_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <Button size="sm" onClick={handlePdf} disabled={pdfBusy} className="font-bold text-xs bg-red-700 hover:bg-red-800 text-white">
+                  <FileDown className="w-3 h-3 mr-2"/> {pdfBusy ? 'Building...' : 'Download PDF'}
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="outline" onClick={handleDownload} className="font-bold text-xs"><Download className="w-3 h-3 mr-2"/> Print/Export</Button>
         </div>
       </div>

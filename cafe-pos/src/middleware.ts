@@ -32,7 +32,6 @@ export async function middleware(request: NextRequest) {
   // Protect all routes under / except for /login and /api
   const isLoginPage = request.nextUrl.pathname.startsWith('/login')
   const isApiRoute = request.nextUrl.pathname.startsWith('/api')
-  const isAdminRoute = ['/dashboard', '/reports', '/settings', '/accounts', '/ledger', '/menu'].some(r => request.nextUrl.pathname.startsWith(r))
   const isPublicAsset = request.nextUrl.pathname.match(/\.(.*)$/) // skip generic static extensions
 
   if (!user && !isLoginPage && !isApiRoute && !isPublicAsset) {
@@ -47,25 +46,36 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // RBAC validation
-  if (user && isAdminRoute) {
+  // RBAC — route access per role
+  // admin: everything | manager: no accounts/users/settings | cashier: billing+orders+KDS | kitchen: KDS only
+  const ROUTE_ROLES: Record<string, string[]> = {
+    '/accounts':  ['admin'],
+    '/ledger':    ['admin'],
+    '/users':     ['admin'],
+    '/settings':  ['admin'],
+    '/dashboard': ['admin', 'manager'],
+    '/reports':   ['admin', 'manager'],
+    '/menu':      ['admin', 'manager'],
+    '/inventory': ['admin', 'manager'],
+    '/orders':    ['admin', 'manager', 'cashier'],
+    '/kds':       ['admin', 'manager', 'cashier', 'kitchen'],
+  }
+
+  if (user && !isApiRoute && !isPublicAsset) {
+    const matched = Object.keys(ROUTE_ROLES).find(r => request.nextUrl.pathname.startsWith(r))
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    const role = profile?.role
+    const role = profile?.role || ''
 
-    // Admin-only routes: dashboard, settings, accounts, ledger, menu management
-    const adminOnlyRoutes = ['/dashboard', '/settings', '/accounts', '/ledger', '/menu']
-    const isAdminOnly = adminOnlyRoutes.some(r => request.nextUrl.pathname.startsWith(r))
-
-    if (isAdminOnly && role !== 'admin') {
+    if (matched && !ROUTE_ROLES[matched].includes(role)) {
       const url = request.nextUrl.clone()
-      url.pathname = '/'
+      url.pathname = role === 'kitchen' ? '/kds/kitchen' : '/'
       return NextResponse.redirect(url)
     }
 
-    // /reports — allowed for admin and desk only, staff gets redirected
-    if (request.nextUrl.pathname.startsWith('/reports') && role !== 'admin' && role !== 'desk') {
+    // Kitchen role: keep them on KDS screens (root '/' is the billing screen)
+    if (role === 'kitchen' && !request.nextUrl.pathname.startsWith('/kds')) {
       const url = request.nextUrl.clone()
-      url.pathname = '/'
+      url.pathname = '/kds/kitchen'
       return NextResponse.redirect(url)
     }
   }

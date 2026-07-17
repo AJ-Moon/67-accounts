@@ -1,15 +1,3 @@
-import { PrismaClient } from '@prisma/client'
-
-const prismaClientSingleton = () => {
-  return new PrismaClient()
-}
-
-declare const globalThis: {
-  prismaGlobal: ReturnType<typeof prismaClientSingleton>;
-} & typeof global;
-
-const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
-
-export default prisma
-
-if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma
+// Legacy Prisma client removed — the app uses Supabase (see src/lib/supabase.ts).
+// This file is kept only so old imports don't break; it is not used anywhere.
+export default null;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Coffee, LayoutDashboard, Settings, ShoppingCart, ListOrdered, FileText, ArrowLeftRight, LogOut } from 'lucide-react';
+import { Coffee, LayoutDashboard, Settings, ShoppingCart, ListOrdered, FileText, ArrowLeftRight, LogOut, Package, Flame, Martini, Users } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -33,14 +33,21 @@ export default function Sidebar() {
   };
 
   const routes = [
-    { label: 'New Order', icon: ShoppingCart, href: '/', roles: ['admin', 'desk', 'outside'] },
-    { label: 'Orders', icon: ListOrdered, href: '/orders', roles: ['admin', 'desk', 'outside'] },
-    { label: 'Menu Items', icon: Coffee, href: '/menu', roles: ['admin', 'desk', 'outside'] },
-    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', roles: ['admin'] },
+    { label: 'New Order', icon: ShoppingCart, href: '/', roles: ['admin', 'manager', 'cashier'] },
+    { label: 'Orders', icon: ListOrdered, href: '/orders', roles: ['admin', 'manager', 'cashier'] },
+    { label: 'Kitchen Screen', icon: Flame, href: '/kds/kitchen', roles: ['admin', 'manager', 'cashier', 'kitchen'] },
+    { label: 'Bar Screen', icon: Martini, href: '/kds/bar', roles: ['admin', 'manager', 'cashier', 'kitchen'] },
+    { label: 'Menu Items', icon: Coffee, href: '/menu', roles: ['admin', 'manager'] },
+    { label: 'Inventory', icon: Package, href: '/inventory', roles: ['admin', 'manager'] },
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', roles: ['admin', 'manager'] },
     { label: 'Accounts / Ledger', icon: ArrowLeftRight, href: '/accounts', roles: ['admin'] },
-    { label: 'Reports', icon: FileText, href: '/reports', roles: ['admin', 'desk'] },
+    { label: 'Reports', icon: FileText, href: '/reports', roles: ['admin', 'manager'] },
+    { label: 'Users', icon: Users, href: '/users', roles: ['admin'] },
     { label: 'Settings', icon: Settings, href: '/settings', roles: ['admin'] },
   ].filter(r => !role || r.roles.includes(role));
+
+  // KDS pages render fullscreen without the sidebar
+  if (pathname.startsWith('/kds')) return null;
 
   return (
     <div className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 hidden md:flex h-full">

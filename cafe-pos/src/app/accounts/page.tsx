@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
-import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote, PiggyBank, Plus } from 'lucide-react';
 
 type LedgerTransaction = {
   id: string;
@@ -43,6 +43,18 @@ export default function AccountsPage() {
   const [expenseAccount, setExpenseAccount] = useState('cash');
   const [expensing, setExpensing] = useState(false);
 
+  // Capital State
+  const [capitalOpen, setCapitalOpen] = useState(false);
+  const [capitalDirection, setCapitalDirection] = useState('in');
+  const [capitalAccount, setCapitalAccount] = useState('cash');
+  const [capitalAmount, setCapitalAmount] = useState('');
+  const [capitalNote, setCapitalNote] = useState('');
+  const [capitalSaving, setCapitalSaving] = useState(false);
+
+  // Dynamic accounts + new account dialog
+  const [dynamicAccounts, setDynamicAccounts] = useState<any[]>([]);
+  const [newAccountOpen, setNewAccountOpen] = useState(false);
+
   const fetchLedger = () => {
     fetch('/api/ledger')
       .then(res => res.json())
@@ -51,11 +63,48 @@ export default function AccountsPage() {
         if (data.history) setHistory(data.history);
         setLoading(false);
       });
+    fetch('/api/accounts')
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setDynamicAccounts(data.filter((a: any) => a.isActive)); })
+      .catch(() => {});
   };
 
   useEffect(() => {
     fetchLedger();
   }, []);
+
+  const handleCapital = async () => {
+    if (!capitalAmount || Number(capitalAmount) <= 0) return toast.error("Enter valid amount");
+    setCapitalSaving(true);
+    const res = await fetch('/api/ledger/capital', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: capitalDirection, account: capitalAccount, amount: Number(capitalAmount), note: capitalNote }),
+    });
+    setCapitalSaving(false);
+    if (res.ok) {
+      toast.success(capitalDirection === 'in' ? "Capital added" : "Capital withdrawn");
+      setCapitalOpen(false); setCapitalAmount(''); setCapitalNote('');
+      fetchLedger();
+    } else toast.error("Capital transaction failed");
+  };
+
+  const handleNewAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData(e.target as HTMLFormElement);
+    const res = await fetch('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: fd.get('code'), name: fd.get('name'), type: fd.get('type'),
+        isPaymentMethod: fd.get('isPaymentMethod') === 'true',
+        openingBalance: parseFloat(String(fd.get('openingBalance')) || '0'),
+      }),
+    });
+    const j = await res.json();
+    if (res.ok) { toast.success("Account created"); setNewAccountOpen(false); fetchLedger(); }
+    else toast.error(j.error || "Failed to create account");
+  };
 
   const handleTransfer = async () => {
     if (!transferAmount || Number(transferAmount) <= 0) return toast.error("Enter valid amount");
@@ -89,14 +138,19 @@ export default function AccountsPage() {
     } else toast.error("Expense failed");
   };
 
-  const accountCards = [
-    { key: 'cash', label: 'Cash' },
-    { key: 'credit_card', label: 'Credit Card' },
-    { key: 'transfer', label: 'Transfer' },
-    { key: 'jazzcash', label: 'JazzCash' },
-    { key: 'foodpanda', label: 'Foodpanda' },
-    { key: 'cash_holding', label: 'Cash Holding' }
-  ];
+  // Dynamic list from the accounts table; falls back to defaults before first load
+  const accountCards = dynamicAccounts.length > 0
+    ? dynamicAccounts
+        .filter(a => a.code !== 'earnings' && a.code !== 'capital')
+        .map(a => ({ key: a.code, label: a.name, balance: Number(a.balance || 0) }))
+    : [
+        { key: 'cash', label: 'Cash' },
+        { key: 'credit_card', label: 'Credit Card' },
+        { key: 'transfer', label: 'Transfer' },
+        { key: 'jazzcash', label: 'JazzCash' },
+        { key: 'foodpanda', label: 'Foodpanda' },
+        { key: 'cash_holding', label: 'Cash Holding' }
+      ] as any[];
 
   return (
     <div className="p-8 max-w-6xl mx-auto flex flex-col h-screen overflow-hidden">
@@ -106,6 +160,104 @@ export default function AccountsPage() {
           <p className="text-slate-500 mt-1">Manage finances, move to earnings, and record expenses</p>
         </div>
         <div className="flex gap-2">
+          {/* Capital Modal */}
+          <Dialog open={capitalOpen} onOpenChange={setCapitalOpen}>
+            <DialogTrigger>
+              <span className="inline-flex h-10 px-4 items-center justify-center rounded-md text-sm font-bold border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"><PiggyBank className="w-4 h-4 mr-2"/> Capital</span>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Owner Capital</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label>Direction</Label>
+                  <Select value={capitalDirection} onValueChange={(v) => setCapitalDirection(v || 'in')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in">Add capital into business</SelectItem>
+                      <SelectItem value="out">Withdraw capital to owner</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{capitalDirection === 'in' ? 'Deposit Into Account' : 'Withdraw From Account'}</Label>
+                  <Select value={capitalAccount} onValueChange={(v) => setCapitalAccount(v || 'cash')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {accountCards.map((a: any) => <SelectItem key={a.key} value={a.key}>{a.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input type="number" value={capitalAmount} onChange={e => setCapitalAmount(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Note (Optional)</Label>
+                  <Input value={capitalNote} onChange={e => setCapitalNote(e.target.value)} placeholder="e.g. Initial investment" />
+                </div>
+                <Button onClick={handleCapital} disabled={capitalSaving} className="w-full font-bold bg-emerald-600 hover:bg-emerald-700 text-white">
+                  {capitalDirection === 'in' ? 'Add Capital' : 'Withdraw Capital'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* New Account Modal */}
+          <Dialog open={newAccountOpen} onOpenChange={setNewAccountOpen}>
+            <DialogTrigger>
+              <span className="inline-flex h-10 px-4 items-center justify-center rounded-md text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"><Plus className="w-4 h-4 mr-2"/> Account</span>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>New Account</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleNewAccount} className="space-y-4 pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Display Name</Label>
+                    <Input name="name" placeholder="e.g. EasyPaisa" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Code (no spaces)</Label>
+                    <Input name="code" placeholder="e.g. easypaisa" required />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select name="type" defaultValue="wallet">
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                        <SelectItem value="wallet">Wallet</SelectItem>
+                        <SelectItem value="platform">Platform</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Usable at Billing?</Label>
+                    <Select name="isPaymentMethod" defaultValue="true">
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="true">Yes — payment method</SelectItem>
+                        <SelectItem value="false">No — internal only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Opening Balance</Label>
+                  <Input name="openingBalance" type="number" step="0.01" defaultValue={0} />
+                </div>
+                <Button type="submit" className="w-full font-bold">Create Account</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           {/* Transfer Funds Modal */}
           <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
             <DialogTrigger>
@@ -207,11 +359,11 @@ export default function AccountsPage() {
              <Banknote className="w-10 h-10 text-green-600/30" />
            </CardContent>
         </Card>
-        {accountCards.map(acc => (
+        {accountCards.map((acc: any) => (
           <Card key={acc.key} className="shadow-sm">
             <CardContent className="p-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{acc.label}</p>
-              <h3 className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(balances[acc.key] || 0)}</h3>
+              <h3 className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(acc.balance ?? balances[acc.key] ?? 0)}</h3>
             </CardContent>
           </Card>
         ))}
@@ -245,6 +397,10 @@ export default function AccountsPage() {
                       {t.transactionType === 'expense' && <span className="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Expense</span>}
                       {t.transactionType === 'earnings_transfer' && <span className="bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Commit to Earnings</span>}
                       {t.transactionType === 'interaccount_transfer' && <span className="bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Transfer</span>}
+                      {t.transactionType === 'capital_injection' && <span className="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Capital In</span>}
+                      {t.transactionType === 'capital_withdrawal' && <span className="bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Capital Out</span>}
+                      {t.transactionType === 'inventory_purchase' && <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Stock Buy</span>}
+                      {t.transactionType === 'manual_adjustment' && <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Adjustment</span>}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 font-medium max-w-xs truncate">
                        {t.transactionType === 'sale' ? `Order payment (${t.sourceAccount ?? 'auto'})` : t.note}

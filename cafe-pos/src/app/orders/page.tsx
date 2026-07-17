@@ -9,19 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
-import { Printer, XCircle, Eye } from 'lucide-react';
+import { Printer, XCircle, Eye, Pencil, Plus, Minus, Trash2 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { buildReceiptCopies } from '@/lib/printUtils';
 
 
 
-type OrderItem = { id: number; name: string; quantity: number; price: number; notes: string; category: string };
+type OrderItem = { id: number; itemId?: string | null; name: string; quantity: number; price: number; notes: string; category: string; subcategory?: string | null; selectedOptions?: any };
 type Order = {
   id: number;
   orderNumber: string;
   subtotal: number;
   discount: number;
   discountPercentage: number;
+  tax?: number;
+  taxRate?: number;
   finalTotal: number;
   status: string;
   source: string;
@@ -30,10 +32,93 @@ type Order = {
   items: OrderItem[];
 };
 
+function EditOrderDialog({ order, onClose, onSaved }: { order: Order; onClose: () => void; onSaved: () => void }) {
+  const [lines, setLines] = useState<any[]>(order.items.map(i => ({ ...i, id: i.itemId ?? null })));
+  const [menu, setMenu] = useState<any[]>([]);
+  const [addId, setAddId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/items').then(r => r.json()).then(d => setMenu(Array.isArray(d) ? d.filter((m: any) => m.isAvailable) : []));
+  }, []);
+
+  const setQty = (idx: number, qty: number) => {
+    if (qty <= 0) return;
+    setLines(ls => ls.map((l, i) => i === idx ? { ...l, quantity: qty } : l));
+  };
+
+  const addItem = () => {
+    const m = menu.find(x => String(x.id) === addId);
+    if (!m) return;
+    setLines(ls => {
+      const existing = ls.findIndex(l => String(l.id) === String(m.id) && !l.notes);
+      if (existing >= 0) return ls.map((l, i) => i === existing ? { ...l, quantity: l.quantity + 1 } : l);
+      return [...ls, { id: m.id, name: m.name, category: m.category, subcategory: m.subcategory, price: Number(m.price), quantity: 1, notes: '' }];
+    });
+    setAddId('');
+  };
+
+  const save = async () => {
+    if (lines.length === 0) { toast.error('Order must keep at least one item — use Cancel instead.'); return; }
+    setSaving(true);
+    const res = await fetch(`/api/orders/${order.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: lines }),
+    });
+    setSaving(false);
+    if (res.ok) { toast.success('Order updated'); onClose(); onSaved(); }
+    else { const j = await res.json().catch(() => ({})); toast.error(j.error || 'Failed to update order'); }
+  };
+
+  const total = lines.reduce((s, l) => s + Number(l.price) * Number(l.quantity), 0);
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Edit Order {order.orderNumber}</DialogTitle></DialogHeader>
+        <div className="space-y-3 pt-2 max-h-[60vh] overflow-y-auto">
+          {lines.map((l, idx) => (
+            <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded">
+              <div className="flex-1">
+                <div className="text-sm font-medium">{l.name}</div>
+                <div className="text-xs text-slate-500">{formatCurrency(Number(l.price))} each{l.notes ? ` • ${l.notes}` : ''}</div>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setQty(idx, l.quantity - 1)}><Minus className="h-3 w-3" /></Button>
+              <span className="w-6 text-center text-sm font-bold">{l.quantity}</span>
+              <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setQty(idx, l.quantity + 1)}><Plus className="h-3 w-3" /></Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500" onClick={() => setLines(ls => ls.filter((_, i) => i !== idx))}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 pt-2">
+          <select className="flex-1 border border-slate-300 rounded p-2 text-sm" value={addId} onChange={e => setAddId(e.target.value)}>
+            <option value="">Add item...</option>
+            {menu.map(m => <option key={m.id} value={String(m.id)}>{m.name}{m.size ? ` (${m.size})` : ''} — {formatCurrency(Number(m.price))}</option>)}
+          </select>
+          <Button variant="outline" onClick={addItem} disabled={!addId}><Plus className="h-4 w-4" /></Button>
+        </div>
+        <div className="flex justify-between font-bold pt-3 border-t mt-2">
+          <span>New Subtotal</span><span>{formatCurrency(total)}</span>
+        </div>
+        <p className="text-xs text-slate-500">Tax & discount are recalculated automatically. Inventory is re-synced.</p>
+        <Button onClick={save} disabled={saving} className="w-full">{saving ? 'Saving...' : 'Save Changes'}</Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [payMethods, setPayMethods] = useState<{ code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/accounts').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setPayMethods(d.filter((a: any) => a.isActive && a.isPaymentMethod).map((a: any) => ({ code: a.code, name: a.name })));
+    }).catch(() => {});
+  }, []);
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
@@ -44,6 +129,7 @@ export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterPayment, setFilterPayment] = useState('All');
 
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [completeOrderId, setCompleteOrderId] = useState<number | null>(null);
   const [completePaymentMethod, setCompletePaymentMethod] = useState<string>('cash');
   const [completeLoading, setCompleteLoading] = useState(false);
@@ -247,6 +333,11 @@ export default function OrdersPage() {
                          <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => updateStatus(order.id, 'getting_ready')}>Start</Button>
                        )}
                        {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
+                         <Button size="sm" variant="outline" className="h-8 w-8 p-0" title="Edit order" onClick={() => setEditOrder(order)}>
+                           <Pencil className="h-4 w-4" />
+                         </Button>
+                       )}
+                       {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
                         <Dialog open={completeOrderId === order.id} onOpenChange={(open) => { if (!open) setCompleteOrderId(null); else setCompleteOrderId(order.id); }}>
                           <DialogTrigger>
                             <span className="inline-flex h-8 px-3 text-xs font-bold items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-md cursor-pointer transition-colors shadow-sm">Complete</span>
@@ -259,12 +350,13 @@ export default function OrdersPage() {
                               <div className="space-y-2">
                                 <Label>Payment Method</Label>
                                 <select className="w-full border border-slate-300 rounded p-2 text-sm" value={completePaymentMethod} onChange={(e) => setCompletePaymentMethod(e.target.value)}>
-                                  <option value="cash">Cash</option>
-                                  <option value="credit_card">Credit Card</option>
-                                  <option value="jazzcash">JazzCash</option>
-                                  <option value="foodpanda">Foodpanda</option>
-                                  <option value="transfer">Transfer</option>
+                                  {(payMethods.length > 0 ? payMethods : [
+                                    { code: 'cash', name: 'Cash' }, { code: 'credit_card', name: 'Credit Card' },
+                                    { code: 'jazzcash', name: 'JazzCash' }, { code: 'foodpanda', name: 'Foodpanda' },
+                                    { code: 'transfer', name: 'Transfer' },
+                                  ]).map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
                                 </select>
+                                <p className="text-xs text-slate-500">Tax is recalculated for the selected payment method.</p>
                               </div>
                               <Button 
                                 onClick={performComplete} 
@@ -378,6 +470,10 @@ export default function OrdersPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {editOrder && (
+        <EditOrderDialog order={editOrder} onClose={() => setEditOrder(null)} onSaved={fetchOrders} />
+      )}
     </div>
   );
 }
