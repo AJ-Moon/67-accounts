@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
-import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote, PiggyBank, Plus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote, PiggyBank, Plus, FileDown, X } from 'lucide-react';
+import { downloadReportPdf } from '@/lib/pdfReports';
 
 type LedgerTransaction = {
   id: string;
@@ -55,6 +56,11 @@ export default function AccountsPage() {
   const [dynamicAccounts, setDynamicAccounts] = useState<any[]>([]);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
 
+  // Individual ledger filters
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState('All');
+  const [pdfBusy, setPdfBusy] = useState(false);
+
   const fetchLedger = () => {
     fetch('/api/ledger')
       .then(res => res.json())
@@ -87,6 +93,32 @@ export default function AccountsPage() {
       setCapitalOpen(false); setCapitalAmount(''); setCapitalNote('');
       fetchLedger();
     } else toast.error("Capital transaction failed");
+  };
+
+  // Individual ledger: filter history by selected account and/or type
+  const filteredHistory = history.filter(t => {
+    if (selectedAccount && t.sourceAccount !== selectedAccount && t.destinationAccount !== selectedAccount) return false;
+    if (typeFilter === 'Expenses' && !['expense', 'inventory_purchase'].includes(t.transactionType)) return false;
+    if (typeFilter === 'Sales' && t.transactionType !== 'sale') return false;
+    if (typeFilter === 'Capital' && !['capital_injection', 'capital_withdrawal'].includes(t.transactionType)) return false;
+    if (typeFilter === 'Transfers' && !['interaccount_transfer', 'earnings_transfer'].includes(t.transactionType)) return false;
+    return true;
+  });
+
+  const accountIn = selectedAccount
+    ? filteredHistory.filter(t => t.destinationAccount === selectedAccount).reduce((s, t) => s + Number(t.amount), 0) : 0;
+  const accountOut = selectedAccount
+    ? filteredHistory.filter(t => t.sourceAccount === selectedAccount).reduce((s, t) => s + Number(t.amount), 0) : 0;
+
+  const handleAccountPdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadReportPdf('ledger', { account: selectedAccount || undefined });
+      toast.success('PDF downloaded');
+    } catch (e: any) {
+      toast.error(e?.message || 'PDF export failed');
+    }
+    setPdfBusy(false);
   };
 
   const handleNewAccount = async (e: React.FormEvent) => {
@@ -350,20 +382,28 @@ export default function AccountsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6 shrink-0">
-        <Card className="col-span-2 md:col-span-full border-green-200 bg-green-50/50">
+        <Card
+          onClick={() => setSelectedAccount(selectedAccount === 'earnings' ? null : 'earnings')}
+          className={`col-span-2 md:col-span-full border-green-200 bg-green-50/50 cursor-pointer transition-all hover:shadow-md ${selectedAccount === 'earnings' ? 'ring-2 ring-green-600' : ''}`}
+        >
            <CardContent className="p-4 flex justify-between items-center">
              <div>
-               <p className="text-sm font-semibold text-green-800 uppercase">Available Earnings</p>
+               <p className="text-sm font-semibold text-green-800 uppercase">Available Earnings {selectedAccount === 'earnings' && <span className="text-[10px] bg-green-200 px-2 py-0.5 rounded ml-2">SHOWING LEDGER ↓</span>}</p>
                <h3 className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(balances['earnings'] || 0)}</h3>
              </div>
              <Banknote className="w-10 h-10 text-green-600/30" />
            </CardContent>
         </Card>
         {accountCards.map((acc: any) => (
-          <Card key={acc.key} className="shadow-sm">
+          <Card
+            key={acc.key}
+            onClick={() => setSelectedAccount(selectedAccount === acc.key ? null : acc.key)}
+            className={`shadow-sm cursor-pointer transition-all hover:shadow-md ${selectedAccount === acc.key ? 'ring-2 ring-amber-500 bg-amber-50/50' : ''}`}
+          >
             <CardContent className="p-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{acc.label}</p>
               <h3 className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(acc.balance ?? balances[acc.key] ?? 0)}</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">{selectedAccount === acc.key ? 'Showing ledger ↓' : 'Click for ledger'}</p>
             </CardContent>
           </Card>
         ))}
@@ -371,7 +411,37 @@ export default function AccountsPage() {
 
       <Card className="flex-1 overflow-hidden flex flex-col shadow-sm">
         <CardHeader className="bg-slate-50 border-b px-4 py-3 shrink-0">
-          <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500">Global Ledger History</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              {selectedAccount ? (
+                <>
+                  Ledger: <span className="text-amber-600">{(accountCards.find((a: any) => a.key === selectedAccount)?.label || selectedAccount).toUpperCase()}</span>
+                  <button onClick={() => setSelectedAccount(null)} className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-0.5 rounded transition-colors">
+                    <X className="w-3 h-3" /> ALL ACCOUNTS
+                  </button>
+                </>
+              ) : 'Global Ledger History'}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {selectedAccount && (
+                <div className="flex items-center gap-3 text-xs font-bold mr-2">
+                  <span className="text-green-700">In: {formatCurrency(accountIn)}</span>
+                  <span className="text-red-600">Out: {formatCurrency(accountOut)}</span>
+                  <span className="text-slate-900">Net: {formatCurrency(accountIn - accountOut)}</span>
+                </div>
+              )}
+              <select
+                className="border border-slate-300 bg-white text-xs font-bold p-1.5 rounded-md text-slate-700"
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+              >
+                {['All', 'Sales', 'Expenses', 'Transfers', 'Capital'].map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+              </select>
+              <Button size="sm" onClick={handleAccountPdf} disabled={pdfBusy} className="h-8 text-xs font-bold bg-red-700 hover:bg-red-800 text-white">
+                <FileDown className="w-3 h-3 mr-1" /> {pdfBusy ? '...' : 'PDF'}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0 flex-1 overflow-y-auto">
           <Table>
@@ -386,10 +456,10 @@ export default function AccountsPage() {
             <TableBody>
               {loading ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-6 text-slate-500">Loading ledger...</TableCell></TableRow>
-              ) : history.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-6 text-slate-500">No ledger transactions found.</TableCell></TableRow>
+              ) : filteredHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-6 text-slate-500">No ledger transactions found{selectedAccount ? ' for this account' : ''}.</TableCell></TableRow>
               ) : (
-                history.map(t => (
+                filteredHistory.map(t => (
                   <TableRow key={t.id}>
                     <TableCell className="text-slate-500 text-[13px]">{new Date(t.createdAt).toLocaleString()}</TableCell>
                     <TableCell>

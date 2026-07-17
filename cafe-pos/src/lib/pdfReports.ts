@@ -6,11 +6,12 @@
  */
 export async function downloadReportPdf(
   type: 'sales_daily' | 'sales_monthly' | 'sales_orders' | 'ledger' | 'expenses' | 'wastage',
-  opts: { from?: string; to?: string; shopName?: string } = {}
+  opts: { from?: string; to?: string; shopName?: string; account?: string } = {}
 ) {
   const params = new URLSearchParams({ type });
   if (opts.from) params.set('from', opts.from);
   if (opts.to) params.set('to', opts.to);
+  if (opts.account) params.set('account', opts.account);
 
   const res = await fetch(`/api/reports/export?${params.toString()}`);
   if (!res.ok) {
@@ -69,5 +70,5 @@ export async function downloadReportPdf(
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  doc.save(`${type}-${stamp}.pdf`);
+  doc.save(`${type}${opts.account ? `-${opts.account}` : ''}-${stamp}.pdf`);
 }

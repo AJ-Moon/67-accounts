@@ -97,15 +97,18 @@ export async function GET(request: Request) {
     }
 
     if (type === 'ledger') {
-      const { data } = await supabase
+      const account = url.searchParams.get('account');
+      let q = supabase
         .from('ledger_transactions')
         .select('createdAt, transactionType, sourceAccount, destinationAccount, amount, note')
         .gte('createdAt', start.toISOString())
         .lte('createdAt', end.toISOString())
         .order('createdAt');
+      if (account) q = q.or(`sourceAccount.eq.${account},destinationAccount.eq.${account}`);
+      const { data } = await q;
       const rows = data || [];
       return NextResponse.json({
-        title: `Ledger Entries (${rangeLabel})`,
+        title: `Ledger${account ? ` — ${account.replace(/_/g, ' ').toUpperCase()}` : ' Entries'} (${rangeLabel})`,
         columns: ['Date', 'Type', 'From', 'To', 'Amount', 'Note'],
         rows: rows.map((t: any) => [
           new Date(t.createdAt).toLocaleString(),
@@ -113,7 +116,17 @@ export async function GET(request: Request) {
           t.sourceAccount || '—', t.destinationAccount || '—',
           fmt(Number(t.amount)), t.note || '',
         ]),
-        summary: { 'Entries': rows.length, 'Total Volume': fmt(rows.reduce((s: number, t: any) => s + Number(t.amount), 0)) },
+        summary: account
+          ? {
+              'Entries': rows.length,
+              'Money In': fmt(rows.filter((t: any) => t.destinationAccount === account).reduce((s: number, t: any) => s + Number(t.amount), 0)),
+              'Money Out': fmt(rows.filter((t: any) => t.sourceAccount === account).reduce((s: number, t: any) => s + Number(t.amount), 0)),
+              'Net Change': fmt(
+                rows.filter((t: any) => t.destinationAccount === account).reduce((s: number, t: any) => s + Number(t.amount), 0) -
+                rows.filter((t: any) => t.sourceAccount === account).reduce((s: number, t: any) => s + Number(t.amount), 0)
+              ),
+            }
+          : { 'Entries': rows.length, 'Total Volume': fmt(rows.reduce((s: number, t: any) => s + Number(t.amount), 0)) },
       });
     }
 
