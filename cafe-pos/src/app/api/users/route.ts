@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/lib/supabaseAdmin';
 
-const ROLES = ['admin', 'manager', 'cashier', 'kitchen'];
+const ROLES = ['admin', 'manager', 'cashier', 'kitchen', 'bar'];
 
 async function requireAdmin() {
   const supabaseServer = await createClient();

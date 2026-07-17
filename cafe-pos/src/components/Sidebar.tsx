@@ -35,8 +35,8 @@ export default function Sidebar() {
   const routes = [
     { label: 'New Order', icon: ShoppingCart, href: '/', roles: ['admin', 'manager', 'cashier'] },
     { label: 'Orders', icon: ListOrdered, href: '/orders', roles: ['admin', 'manager', 'cashier'] },
-    { label: 'Kitchen Screen', icon: Flame, href: '/kds/kitchen', roles: ['admin', 'manager', 'cashier', 'kitchen'] },
-    { label: 'Bar Screen', icon: Martini, href: '/kds/bar', roles: ['admin', 'manager', 'cashier', 'kitchen'] },
+    { label: 'Kitchen Screen', icon: Flame, href: '/kds/kitchen', roles: ['admin', 'manager', 'cashier'] },
+    { label: 'Bar Screen', icon: Martini, href: '/kds/bar', roles: ['admin', 'manager', 'cashier'] },
     { label: 'Menu Items', icon: Coffee, href: '/menu', roles: ['admin', 'manager'] },
     { label: 'Inventory', icon: Package, href: '/inventory', roles: ['admin', 'manager'] },
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', roles: ['admin', 'manager'] },

@@ -59,6 +59,7 @@ export default function AccountsPage() {
   // Individual ledger filters
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const [pdfBusy, setPdfBusy] = useState(false);
 
   const fetchLedger = () => {
@@ -95,13 +96,29 @@ export default function AccountsPage() {
     } else toast.error("Capital transaction failed");
   };
 
-  // Individual ledger: filter history by selected account and/or type
+  // Every ledger you can pick from the dropdown (all accounts incl. earnings & capital)
+  const ledgerOptions: { key: string; label: string }[] = dynamicAccounts.length > 0
+    ? dynamicAccounts.map(a => ({ key: a.code, label: a.name }))
+    : [
+        { key: 'cash', label: 'Cash' }, { key: 'credit_card', label: 'Credit Card' },
+        { key: 'transfer', label: 'Bank Transfer' }, { key: 'jazzcash', label: 'JazzCash' },
+        { key: 'foodpanda', label: 'Foodpanda' }, { key: 'cash_holding', label: 'Cash Holding' },
+        { key: 'earnings', label: 'Earnings' }, { key: 'capital', label: 'Owner Capital' },
+      ];
+
+  // Individual ledger: filter history by selected account, type, and search
   const filteredHistory = history.filter(t => {
     if (selectedAccount && t.sourceAccount !== selectedAccount && t.destinationAccount !== selectedAccount) return false;
     if (typeFilter === 'Expenses' && !['expense', 'inventory_purchase'].includes(t.transactionType)) return false;
     if (typeFilter === 'Sales' && t.transactionType !== 'sale') return false;
     if (typeFilter === 'Capital' && !['capital_injection', 'capital_withdrawal'].includes(t.transactionType)) return false;
     if (typeFilter === 'Transfers' && !['interaccount_transfer', 'earnings_transfer'].includes(t.transactionType)) return false;
+    if (typeFilter === 'Adjustments' && t.transactionType !== 'manual_adjustment') return false;
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      const hay = `${t.note || ''} ${t.transactionType} ${t.sourceAccount || ''} ${t.destinationAccount || ''} ${t.amount}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
@@ -411,33 +428,53 @@ export default function AccountsPage() {
 
       <Card className="flex-1 overflow-hidden flex flex-col shadow-sm">
         <CardHeader className="bg-slate-50 border-b px-4 py-3 shrink-0">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
-              {selectedAccount ? (
-                <>
-                  Ledger: <span className="text-amber-600">{(accountCards.find((a: any) => a.key === selectedAccount)?.label || selectedAccount).toUpperCase()}</span>
-                  <button onClick={() => setSelectedAccount(null)} className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-0.5 rounded transition-colors">
-                    <X className="w-3 h-3" /> ALL ACCOUNTS
-                  </button>
-                </>
-              ) : 'Global Ledger History'}
-            </CardTitle>
-            <div className="flex items-center gap-2">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500">
+                {selectedAccount
+                  ? <>Ledger: <span className="text-amber-600">{(ledgerOptions.find(a => a.key === selectedAccount)?.label || selectedAccount).toUpperCase()}</span></>
+                  : typeFilter !== 'All' ? <>{typeFilter} Ledger — All Accounts</> : 'Global Ledger History'}
+              </CardTitle>
               {selectedAccount && (
-                <div className="flex items-center gap-3 text-xs font-bold mr-2">
+                <div className="flex items-center gap-3 text-xs font-bold">
                   <span className="text-green-700">In: {formatCurrency(accountIn)}</span>
                   <span className="text-red-600">Out: {formatCurrency(accountOut)}</span>
                   <span className="text-slate-900">Net: {formatCurrency(accountIn - accountOut)}</span>
                 </div>
               )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="border border-slate-300 bg-white text-xs font-bold p-1.5 rounded-md text-slate-700"
+                value={selectedAccount || 'all'}
+                onChange={e => setSelectedAccount(e.target.value === 'all' ? null : e.target.value)}
+              >
+                <option value="all">All Accounts</option>
+                {ledgerOptions.map(a => <option key={a.key} value={a.key}>{a.label} Ledger</option>)}
+              </select>
               <select
                 className="border border-slate-300 bg-white text-xs font-bold p-1.5 rounded-md text-slate-700"
                 value={typeFilter}
                 onChange={e => setTypeFilter(e.target.value)}
               >
-                {['All', 'Sales', 'Expenses', 'Transfers', 'Capital'].map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+                {['All', 'Sales', 'Expenses', 'Transfers', 'Capital', 'Adjustments'].map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
               </select>
-              <Button size="sm" onClick={handleAccountPdf} disabled={pdfBusy} className="h-8 text-xs font-bold bg-red-700 hover:bg-red-800 text-white">
+              <input
+                className="border border-slate-300 bg-white text-xs p-1.5 rounded-md text-slate-700 flex-1 min-w-[140px] max-w-xs outline-none focus:ring-1 focus:ring-slate-400"
+                placeholder="Search notes, amounts..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+              {(selectedAccount || typeFilter !== 'All' || searchTerm) && (
+                <button
+                  onClick={() => { setSelectedAccount(null); setTypeFilter('All'); setSearchTerm(''); }}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded transition-colors"
+                >
+                  <X className="w-3 h-3" /> CLEAR
+                </button>
+              )}
+              <span className="text-[11px] text-slate-400 font-medium">{filteredHistory.length} entries</span>
+              <Button size="sm" onClick={handleAccountPdf} disabled={pdfBusy} className="h-8 text-xs font-bold bg-red-700 hover:bg-red-800 text-white ml-auto">
                 <FileDown className="w-3 h-3 mr-1" /> {pdfBusy ? '...' : 'PDF'}
               </Button>
             </div>

@@ -47,35 +47,40 @@ export async function middleware(request: NextRequest) {
   }
 
   // RBAC — route access per role
-  // admin: everything | manager: no accounts/users/settings | cashier: billing+orders+KDS | kitchen: KDS only
+  // admin: everything | manager: no accounts/users/settings | cashier: billing+orders+KDS
+  // kitchen: ONLY /kds/kitchen | bar: ONLY /kds/bar
   const ROUTE_ROLES: Record<string, string[]> = {
-    '/accounts':  ['admin'],
-    '/ledger':    ['admin'],
-    '/users':     ['admin'],
-    '/settings':  ['admin'],
-    '/dashboard': ['admin', 'manager'],
-    '/reports':   ['admin', 'manager'],
-    '/menu':      ['admin', 'manager'],
-    '/inventory': ['admin', 'manager'],
-    '/orders':    ['admin', 'manager', 'cashier'],
-    '/kds':       ['admin', 'manager', 'cashier', 'kitchen'],
+    '/accounts':    ['admin'],
+    '/ledger':      ['admin'],
+    '/users':       ['admin'],
+    '/settings':    ['admin'],
+    '/dashboard':   ['admin', 'manager'],
+    '/reports':     ['admin', 'manager'],
+    '/menu':        ['admin', 'manager'],
+    '/inventory':   ['admin', 'manager'],
+    '/orders':      ['admin', 'manager', 'cashier'],
+    '/kds/kitchen': ['admin', 'manager', 'cashier', 'kitchen'],
+    '/kds/bar':     ['admin', 'manager', 'cashier', 'bar'],
   }
 
   if (user && !isApiRoute && !isPublicAsset) {
-    const matched = Object.keys(ROUTE_ROLES).find(r => request.nextUrl.pathname.startsWith(r))
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
     const role = profile?.role || ''
 
-    if (matched && !ROUTE_ROLES[matched].includes(role)) {
+    // Station roles are hard-locked to their single screen — nothing else exists for them.
+    const stationHome: Record<string, string> = { kitchen: '/kds/kitchen', bar: '/kds/bar' }
+    if (stationHome[role] && request.nextUrl.pathname !== stationHome[role]) {
       const url = request.nextUrl.clone()
-      url.pathname = role === 'kitchen' ? '/kds/kitchen' : '/'
+      url.pathname = stationHome[role]
       return NextResponse.redirect(url)
     }
 
-    // Kitchen role: keep them on KDS screens (root '/' is the billing screen)
-    if (role === 'kitchen' && !request.nextUrl.pathname.startsWith('/kds')) {
+    const matched = Object.keys(ROUTE_ROLES)
+      .sort((a, b) => b.length - a.length) // most specific first
+      .find(r => request.nextUrl.pathname.startsWith(r))
+    if (matched && !ROUTE_ROLES[matched].includes(role)) {
       const url = request.nextUrl.clone()
-      url.pathname = '/kds/kitchen'
+      url.pathname = stationHome[role] || '/'
       return NextResponse.redirect(url)
     }
   }

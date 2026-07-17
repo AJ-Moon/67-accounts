@@ -15,7 +15,8 @@ const ROLES = [
   { value: 'admin', label: 'Admin — full access' },
   { value: 'manager', label: 'Manager — reports, inventory, orders' },
   { value: 'cashier', label: 'Cashier — billing & orders' },
-  { value: 'kitchen', label: 'Kitchen — KDS screens only' },
+  { value: 'kitchen', label: 'Kitchen — kitchen screen only' },
+  { value: 'bar', label: 'Bar — bar screen only' },
 ];
 
 type Profile = { id: string; role: string; display_name?: string; email?: string | null; created_at: string };
@@ -78,6 +79,7 @@ export default function UsersPage() {
   const roleBadge = (role: string) => ({
     admin: 'bg-purple-100 text-purple-700', manager: 'bg-blue-100 text-blue-700',
     cashier: 'bg-green-100 text-green-700', kitchen: 'bg-orange-100 text-orange-700',
+    bar: 'bg-cyan-100 text-cyan-700',
   }[role] || 'bg-slate-100 text-slate-600');
 
   return (

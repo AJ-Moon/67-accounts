@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, RotateCcw, Flame, Coffee } from 'lucide-react';
+import { CheckCircle2, RotateCcw, Flame, Coffee, Volume2, VolumeX, LogOut } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/utils/supabase/client';
+import { playNewOrderSound } from '@/lib/sound';
 
 type KdsItem = {
   id: string;
@@ -52,15 +55,49 @@ function plainNote(item: KdsItem) {
 export default function KdsScreen({ station }: { station: 'kitchen' | 'bar' }) {
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const router = useRouter();
+
+  // Sound on NEW orders: remember which order ids we've already seen
+  const seenIds = useRef<Set<string> | null>(null);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  useEffect(() => {
+    try { setMuted(localStorage.getItem(`kds-muted-${station}`) === '1'); } catch { /* ignore */ }
+  }, [station]);
+
+  const toggleMute = () => {
+    setMuted(m => {
+      try { localStorage.setItem(`kds-muted-${station}`, m ? '0' : '1'); } catch { /* ignore */ }
+      return !m;
+    });
+  };
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/kds?station=${station}`);
       const data = await res.json();
-      if (Array.isArray(data)) setOrders(data);
+      if (Array.isArray(data)) {
+        const ids = new Set<string>(data.map((o: any) => o.id));
+        if (seenIds.current !== null) {
+          const fresh = data.filter((o: any) => !seenIds.current!.has(o.id));
+          if (fresh.length > 0) {
+            if (!mutedRef.current) playNewOrderSound();
+            fresh.forEach((o: any) => toast.info(`New order ${o.orderNumber.split('-').pop()} — ${o.items.length} item(s)`));
+          }
+        }
+        seenIds.current = ids;
+        setOrders(data);
+      }
     } catch { /* keep last state */ }
     setLoading(false);
   }, [station]);
+
+  const handleLogout = async () => {
+    await createClient().auth.signOut();
+    router.push('/login');
+  };
 
   useEffect(() => {
     load();
@@ -97,8 +134,15 @@ export default function KdsScreen({ station }: { station: 'kitchen' | 'bar' }) {
           <Icon className="h-8 w-8 text-amber-400" />
           <h1 className="text-3xl font-bold tracking-tight uppercase">{station} Display</h1>
         </div>
-        <div className="text-slate-400 text-sm">
-          {orders.length} active • auto-refreshes every 5s
+        <div className="flex items-center gap-3">
+          <span className="text-slate-400 text-sm">{orders.length} active • refreshes every 5s</span>
+          <button onClick={toggleMute} title={muted ? 'Unmute new-order sound' : 'Mute new-order sound'}
+            className={`p-2 rounded-lg transition-colors ${muted ? 'bg-red-900/50 text-red-400' : 'bg-slate-800 text-green-400 hover:bg-slate-700'}`}>
+            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+          <button onClick={handleLogout} title="Logout" className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -121,6 +165,9 @@ export default function KdsScreen({ station }: { station: 'kitchen' | 'bar' }) {
                     <div className="text-xl font-bold">{order.orderNumber.split('-').pop()}</div>
                     <div className="text-xs text-slate-400">
                       {order.orderType || 'dine in'}{order.customerName ? ` • ${order.customerName}` : ''}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      placed {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                   <span className="text-sm font-mono bg-slate-900 px-2 py-1 rounded text-amber-400">{elapsed(order.createdAt)}</span>

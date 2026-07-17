@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { playOrderReadySound } from '@/lib/sound';
+import { Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -134,13 +136,38 @@ export default function OrdersPage() {
   const [completePaymentMethod, setCompletePaymentMethod] = useState<string>('cash');
   const [completeLoading, setCompleteLoading] = useState(false);
 
+  // Sound when an order becomes fully READY (kitchen + bar both done)
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const readySeen = useRef<Set<number | string> | null>(null);
+
+  useEffect(() => {
+    try { setMuted(localStorage.getItem('orders-muted') === '1'); } catch { /* ignore */ }
+  }, []);
+  const toggleMute = () => setMuted(m => {
+    try { localStorage.setItem('orders-muted', m ? '0' : '1'); } catch { /* ignore */ }
+    return !m;
+  });
+
   const fetchOrders = () => {
     fetch('/api/orders')
       .then(res => res.json())
       .then(data => {
+        if (!Array.isArray(data)) return;
+        const readyNow = data.filter((o: any) => o.status === 'ready').map((o: any) => o.id);
+        if (readySeen.current !== null) {
+          const fresh = data.filter((o: any) => o.status === 'ready' && !readySeen.current!.has(o.id));
+          if (fresh.length > 0) {
+            if (!mutedRef.current) playOrderReadySound();
+            fresh.forEach((o: any) => toast.success(`Order ${o.orderNumber} is READY for pickup/serving!`, { duration: 8000 }));
+          }
+        }
+        readySeen.current = new Set(readyNow);
         setOrders(data);
         setLoading(false);
-      });
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -154,6 +181,9 @@ export default function OrdersPage() {
     }
     loadRole();
     fetchOrders();
+    const t = setInterval(fetchOrders, 10000); // live refresh + ready notifications
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reprint = async (id: number) => {
@@ -257,9 +287,12 @@ export default function OrdersPage() {
   const StatusBadge = ({ status }: { status: string }) => {
     if (status === 'deleted' || status === 'cancelled') return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Cancelled</span>;
     if (status === 'completed') return <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Completed</span>;
+    if (status === 'ready') return <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider animate-pulse">● Ready</span>;
     if (status === 'getting_ready') return <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Getting Ready</span>;
     return <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Placed</span>;
   };
+
+  const isOpen = (s: string) => ['placed', 'posted', 'getting_ready', 'ready'].includes(s);
 
   const filteredOrders = orders.filter(o => 
     (filterStatus === 'All' || o.status === filterStatus) &&
@@ -271,8 +304,12 @@ export default function OrdersPage() {
       <div className="mb-6 shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Order History</h1>
-          <p className="text-slate-500 mt-1">Review, reprint, or cancel past orders</p>
+          <p className="text-slate-500 mt-1">Live view — chimes when kitchen & bar finish an order</p>
         </div>
+        <button onClick={toggleMute} title={muted ? 'Unmute ready notification' : 'Mute ready notification'}
+          className={`p-2 rounded-lg border transition-colors ${muted ? 'border-red-200 bg-red-50 text-red-500' : 'border-slate-200 bg-white text-green-600 hover:bg-slate-50'}`}>
+          {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+        </button>
       </div>
 
       <div className="flex gap-4 mb-4 shrink-0">
@@ -280,6 +317,7 @@ export default function OrdersPage() {
           <option value="All">All Statuses</option>
           <option value="placed">Placed</option>
           <option value="getting_ready">Getting Ready</option>
+          <option value="ready">Ready</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
           <option value="deleted">Deleted</option>
@@ -332,12 +370,12 @@ export default function OrdersPage() {
                        {(order.status === 'placed' || order.status === 'posted') && (
                          <Button size="sm" variant="outline" className="h-8 text-xs font-bold border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => updateStatus(order.id, 'getting_ready')}>Start</Button>
                        )}
-                       {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
+                       {isOpen(order.status) && (
                          <Button size="sm" variant="outline" className="h-8 w-8 p-0" title="Edit order" onClick={() => setEditOrder(order)}>
                            <Pencil className="h-4 w-4" />
                          </Button>
                        )}
-                       {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
+                       {isOpen(order.status) && (
                         <Dialog open={completeOrderId === order.id} onOpenChange={(open) => { if (!open) setCompleteOrderId(null); else setCompleteOrderId(order.id); }}>
                           <DialogTrigger>
                             <span className="inline-flex h-8 px-3 text-xs font-bold items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-md cursor-pointer transition-colors shadow-sm">Complete</span>
@@ -413,7 +451,7 @@ export default function OrdersPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                      {(order.status === 'placed' || order.status === 'posted' || order.status === 'getting_ready') && (
+                      {isOpen(order.status) && (
                          <Button size="sm" variant="ghost" className="h-8 text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700" onClick={() => updateStatus(order.id, 'cancelled')}>Cancel</Button>
                       )}
                       

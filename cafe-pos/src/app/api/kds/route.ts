@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const { data: orders, error } = await supabase
       .from('orders')
       .select('id, orderNumber, orderType, customerName, status, createdAt, items:order_items(*)')
-      .in('status', ['placed', 'getting_ready'])
+      .in('status', ['placed', 'getting_ready', 'ready'])
       .order('createdAt', { ascending: true });
     if (error) throw error;
 
@@ -47,7 +47,25 @@ export async function POST(request: Request) {
 
     const { error } = await query;
     if (error) throw error;
-    return NextResponse.json({ success: true });
+
+    // If EVERY item on the order (all stations) is now ready → order status 'ready'
+    // (desk gets a sound + can complete it). Undo flips it back to getting_ready.
+    const { data: allItems } = await supabase
+      .from('order_items').select('stationStatus').eq('orderId', orderId);
+    const everyReady = (allItems || []).length > 0 && (allItems || []).every((i: any) => i.stationStatus === 'ready');
+
+    const { data: order } = await supabase.from('orders').select('status').eq('id', orderId).single();
+    if (order && !['completed', 'cancelled'].includes(order.status)) {
+      if (everyReady && order.status !== 'ready') {
+        await supabase.from('orders').update({ status: 'ready', updatedAt: new Date().toISOString() }).eq('id', orderId);
+      } else if (!everyReady && order.status === 'ready') {
+        await supabase.from('orders').update({ status: 'getting_ready', updatedAt: new Date().toISOString() }).eq('id', orderId);
+      } else if (!undo && order.status === 'placed') {
+        await supabase.from('orders').update({ status: 'getting_ready', updatedAt: new Date().toISOString() }).eq('id', orderId);
+      }
+    }
+
+    return NextResponse.json({ success: true, orderReady: everyReady });
   } catch {
     return NextResponse.json({ error: 'Failed to update item status' }, { status: 500 });
   }
