@@ -38,6 +38,7 @@ function EditOrderDialog({ order, onClose, onSaved }: { order: Order; onClose: (
   const [lines, setLines] = useState<any[]>(order.items.map(i => ({ ...i, id: i.itemId ?? null })));
   const [menu, setMenu] = useState<any[]>([]);
   const [addId, setAddId] = useState('');
+  const [discountPct, setDiscountPct] = useState<number>(Number(order.discountPercentage || 0));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ function EditOrderDialog({ order, onClose, onSaved }: { order: Order; onClose: (
     const res = await fetch(`/api/orders/${order.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: lines }),
+      body: JSON.stringify({ items: lines, discountPercentage: discountPct }),
     });
     setSaving(false);
     if (res.ok) { toast.success('Order updated'); onClose(); onSaved(); }
@@ -99,6 +100,13 @@ function EditOrderDialog({ order, onClose, onSaved }: { order: Order; onClose: (
             {menu.map(m => <option key={m.id} value={String(m.id)}>{m.name}{m.size ? ` (${m.size})` : ''} — {formatCurrency(Number(m.price))}</option>)}
           </select>
           <Button variant="outline" onClick={addItem} disabled={!addId}><Plus className="h-4 w-4" /></Button>
+        </div>
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-sm font-medium">Discount</span>
+          <select className="border border-slate-300 rounded p-1.5 text-sm font-bold" value={discountPct} onChange={e => setDiscountPct(Number(e.target.value))}>
+            <option value={0}>No discount</option>
+            {[5, 10, 15, 20, 25, 30].map(p => <option key={p} value={p}>{p}%</option>)}
+          </select>
         </div>
         <div className="flex justify-between font-bold pt-3 border-t mt-2">
           <span>New Subtotal</span><span>{formatCurrency(total)}</span>
@@ -436,7 +444,7 @@ export default function OrdersPage() {
                               </div>
                               {order.discount > 0 && (
                                 <div className="flex justify-between text-red-600 font-medium">
-                                  <span>Discount ({order.discountPercentage || 20}%)</span>
+                                  <span>Discount ({order.discountPercentage || 0}%)</span>
                                   <span>-{formatCurrency(order.discount)}</span>
                                 </div>
                               )}

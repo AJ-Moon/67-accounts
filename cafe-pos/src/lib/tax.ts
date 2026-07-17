@@ -34,7 +34,8 @@ export function getRateFor(paymentMethod: string, cfg: { enabled: boolean; rates
 export function computeTotals(input: TotalsInput, cfg: { enabled: boolean; inclusive: boolean; rates: Record<string, number> }) {
   const subtotal = round2(input.items.reduce((s, i) => s + Number(i.price) * Number(i.quantity), 0));
 
-  const normalizedDiscount = Number(input.discountPercentage || 0);
+  // Discount policy: 0–30% max, whole numbers (UI offers steps of 5)
+  const normalizedDiscount = Math.min(30, Math.max(0, Math.round(Number(input.discountPercentage || 0))));
   const discountableSubtotal = input.items.reduce((sum, i) => {
     if ((i.subcategory || '').toLowerCase() === 'combo meal') return sum;
     return sum + Number(i.price) * Number(i.quantity);

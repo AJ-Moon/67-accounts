@@ -48,7 +48,7 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [mainCategory, setMainCategory] = useState<string>('Drinks');
 
-  const [applyDiscount, setApplyDiscount] = useState(false);
+  const [discountPct, setDiscountPct] = useState(0); // 0–30 in steps of 5
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   
@@ -159,11 +159,11 @@ export default function POSPage() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // Discount (20%) applies to everything EXCEPT Combo Meals
+  // Discount applies to everything EXCEPT Combo Meals
   const discountableSubtotal = cart
     .filter(item => (item.subcategory || '').toLowerCase() !== 'combo meal')
     .reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discountAmount = applyDiscount ? discountableSubtotal * 0.20 : 0;
+  const discountAmount = discountableSubtotal * discountPct / 100;
   const taxable = Math.max(0, subtotal - discountAmount);
   const previewTax = taxCfg.enabled && taxCfg.cashRate > 0
     ? (taxCfg.inclusive ? taxable - taxable / (1 + taxCfg.cashRate / 100) : taxable * taxCfg.cashRate / 100)
@@ -197,7 +197,7 @@ export default function POSPage() {
       const payload = {
         items: cart,
         subtotal,
-        discountPercentage: applyDiscount ? 20 : 0,
+        discountPercentage: discountPct,
         paymentMethod: 'pending',
         printReceipts: print
       };
@@ -239,7 +239,7 @@ export default function POSPage() {
         }
 
         setCart([]);
-        setApplyDiscount(false);
+        setDiscountPct(0);
       } else {
         toast.error(resData.error || "Failed to save order");
       }
@@ -392,16 +392,22 @@ export default function POSPage() {
               <span>{formatCurrency(subtotal)}</span>
             </div>
             
-            <div className="flex items-center space-x-2 py-1">
-               <Checkbox id="discount" checked={applyDiscount} onCheckedChange={(val: boolean | string) => setApplyDiscount(!!val)} />
-               <label htmlFor="discount" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                 Apply 20% Discount
-               </label>
+            <div className="flex items-center justify-between py-1">
+               <label htmlFor="discount" className="text-sm font-medium leading-none">Discount</label>
+               <select
+                 id="discount"
+                 className="border border-slate-300 bg-white text-sm font-bold p-1.5 rounded-md text-slate-700 outline-none focus:ring-1 focus:ring-slate-900"
+                 value={discountPct}
+                 onChange={e => setDiscountPct(Number(e.target.value))}
+               >
+                 <option value={0}>No discount</option>
+                 {[5, 10, 15, 20, 25, 30].map(p => <option key={p} value={p}>{p}%</option>)}
+               </select>
             </div>
 
-            {applyDiscount && (
+            {discountPct > 0 && (
                <div className="flex justify-between items-center text-red-600 font-medium">
-                 <span>Discount (20%)</span>
+                 <span>Discount ({discountPct}%)</span>
                  <span>-{formatCurrency(discountAmount)}</span>
                </div>
             )}
@@ -424,7 +430,7 @@ export default function POSPage() {
           
 
           <div className="grid grid-cols-3 gap-2 pt-2">
-             <Button variant="ghost" className="w-full font-bold h-10 text-red-600 hover:text-red-700 hover:bg-red-50" disabled={isProcessing || cart.length === 0} onClick={() => { setCart([]); setApplyDiscount(false); }}>
+             <Button variant="ghost" className="w-full font-bold h-10 text-red-600 hover:text-red-700 hover:bg-red-50" disabled={isProcessing || cart.length === 0} onClick={() => { setCart([]); setDiscountPct(0); }}>
               Cancel
              </Button>
              <Button variant="outline" className="w-full font-bold h-10 border-slate-300" disabled={isProcessing || cart.length === 0} onClick={() => submitOrder(false)}>
