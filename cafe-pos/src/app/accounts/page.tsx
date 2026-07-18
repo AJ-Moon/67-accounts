@@ -60,6 +60,8 @@ export default function AccountsPage() {
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [pdfBusy, setPdfBusy] = useState(false);
 
   const fetchLedger = () => {
@@ -119,6 +121,8 @@ export default function AccountsPage() {
       const hay = `${t.note || ''} ${t.transactionType} ${t.sourceAccount || ''} ${t.destinationAccount || ''} ${t.amount}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
+    if (fromDate && new Date(t.createdAt) < new Date(`${fromDate}T00:00:00`)) return false;
+    if (toDate && new Date(t.createdAt) > new Date(`${toDate}T23:59:59.999`)) return false;
     return true;
   });
 
@@ -130,7 +134,11 @@ export default function AccountsPage() {
   const handleAccountPdf = async () => {
     setPdfBusy(true);
     try {
-      await downloadReportPdf('ledger', { account: selectedAccount || undefined });
+      await downloadReportPdf('ledger', {
+        account: selectedAccount || undefined,
+        from: fromDate || '2000-01-01', // no date chosen = full history, same as on screen
+        to: toDate || undefined,
+      });
       toast.success('PDF downloaded');
     } catch (e: any) {
       toast.error(e?.message || 'PDF export failed');
@@ -465,9 +473,16 @@ export default function AccountsPage() {
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
-              {(selectedAccount || typeFilter !== 'All' || searchTerm) && (
+              <div className="flex items-center gap-1 border border-slate-300 bg-white rounded-md px-1.5 py-0.5">
+                <input type="date" className="text-xs text-slate-700 outline-none py-1" title="From date"
+                  value={fromDate} onChange={e => setFromDate(e.target.value)} />
+                <span className="text-[10px] font-bold text-slate-400">to</span>
+                <input type="date" className="text-xs text-slate-700 outline-none py-1" title="To date"
+                  value={toDate} onChange={e => setToDate(e.target.value)} />
+              </div>
+              {(selectedAccount || typeFilter !== 'All' || searchTerm || fromDate || toDate) && (
                 <button
-                  onClick={() => { setSelectedAccount(null); setTypeFilter('All'); setSearchTerm(''); }}
+                  onClick={() => { setSelectedAccount(null); setTypeFilter('All'); setSearchTerm(''); setFromDate(''); setToDate(''); }}
                   className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded transition-colors"
                 >
                   <X className="w-3 h-3" /> CLEAR
