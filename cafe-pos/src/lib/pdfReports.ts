@@ -26,13 +26,19 @@ function fileStamp(type: ReportType, opts: ReportOpts, ext: string) {
   return `${type}${opts.account ? `-${opts.account}` : ''}-${stamp}.${ext}`;
 }
 
-/** Download the report as an Excel (.xlsx) file. */
-export async function downloadReportXlsx(type: ReportType, opts: ReportOpts = {}) {
-  const report = await fetchReport(type, opts);
+export type ReportData = {
+  title: string;
+  columns: string[];
+  rows: any[][];
+  summary?: Record<string, any>;
+};
+
+/** Render already-prepared rows (e.g. the filtered view on screen) to Excel. */
+export async function exportDataXlsx(report: ReportData, filename: string, shopName?: string) {
   const XLSX = await import('xlsx');
 
   const aoa: any[][] = [
-    [opts.shopName || '67 Café'],
+    [shopName || '67 Café'],
     [report.title],
     [`Generated ${new Date().toLocaleString()}`],
     [],
@@ -50,29 +56,25 @@ export async function downloadReportXlsx(type: ReportType, opts: ReportOpts = {}
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, report.title.slice(0, 31).replace(/[\\/?*[\]:]/g, '-'));
-  XLSX.writeFile(wb, fileStamp(type, opts, 'xlsx'));
+  XLSX.writeFile(wb, filename);
 }
 
-/** Download the report as a formatted PDF. */
-export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {}) {
-  const report = await fetchReport(type, opts);
-
+/** Render already-prepared rows to a formatted PDF. */
+export async function exportDataPdf(report: ReportData, filename: string, shopName?: string) {
   const { default: jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Header
   doc.setFontSize(16).setFont('helvetica', 'bold');
-  doc.text(opts.shopName || '67 Café', 40, 46);
+  doc.text(shopName || '67 Café', 40, 46);
   doc.setFontSize(11).setFont('helvetica', 'normal');
   doc.text(report.title, 40, 64);
   doc.setFontSize(8).setTextColor(120);
   doc.text(`Generated ${new Date().toLocaleString()}`, pageWidth - 40, 46, { align: 'right' });
   doc.setTextColor(0);
 
-  // Table
   autoTable(doc, {
     startY: 80,
     head: [report.columns],
@@ -83,7 +85,6 @@ export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {})
     margin: { left: 40, right: 40 },
   });
 
-  // Summary
   const endY = (doc as any).lastAutoTable?.finalY || 90;
   let y = endY + 18;
   doc.setFontSize(9).setFont('helvetica', 'bold');
@@ -98,7 +99,6 @@ export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {})
     doc.text(isCount ? String(v) : `Rs ${num}`, 140, y);
   });
 
-  // Page numbers
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
@@ -106,5 +106,17 @@ export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {})
     doc.text(`Page ${i} of ${pages}`, pageWidth - 40, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
   }
 
-  doc.save(fileStamp(type, opts, 'pdf'));
+  doc.save(filename);
+}
+
+/** Fetch a server-built report and download as Excel. */
+export async function downloadReportXlsx(type: ReportType, opts: ReportOpts = {}) {
+  const report = await fetchReport(type, opts);
+  await exportDataXlsx(report, fileStamp(type, opts, 'xlsx'), opts.shopName);
+}
+
+/** Fetch a server-built report and download as PDF. */
+export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {}) {
+  const report = await fetchReport(type, opts);
+  await exportDataPdf(report, fileStamp(type, opts, 'pdf'), opts.shopName);
 }

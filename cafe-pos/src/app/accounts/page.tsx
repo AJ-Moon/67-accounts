@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote, PiggyBank, Plus, FileDown, X } from 'lucide-react';
-import { downloadReportPdf, downloadReportXlsx } from '@/lib/pdfReports';
+import { exportDataPdf, exportDataXlsx } from '@/lib/pdfReports';
 
 type LedgerTransaction = {
   id: string;
@@ -131,16 +131,37 @@ export default function AccountsPage() {
   const accountOut = selectedAccount
     ? filteredHistory.filter(t => t.sourceAccount === selectedAccount).reduce((s, t) => s + Number(t.amount), 0) : 0;
 
+  // Export EXACTLY what is shown on screen — all filters (account, type, search, dates) apply
   const handleExport = async (format: 'pdf' | 'xlsx') => {
     setPdfBusy(true);
     try {
-      const opts = {
-        account: selectedAccount || undefined,
-        from: fromDate || '2000-01-01', // no date chosen = full history, same as on screen
-        to: toDate || undefined,
+      const accLabel = selectedAccount
+        ? (ledgerOptions.find(a => a.key === selectedAccount)?.label || selectedAccount) : 'All Accounts';
+      const parts = [accLabel];
+      if (typeFilter !== 'All') parts.push(typeFilter);
+      if (fromDate || toDate) parts.push(`${fromDate || 'start'} to ${toDate || 'today'}`);
+      if (searchTerm.trim()) parts.push(`search "${searchTerm.trim()}"`);
+
+      const report = {
+        title: `Ledger — ${parts.join(' • ')}`,
+        columns: ['Date', 'Type', 'From', 'To', 'Amount', 'Note'],
+        rows: filteredHistory.map(t => [
+          new Date(t.createdAt).toLocaleString(),
+          t.transactionType.replace(/_/g, ' '),
+          t.sourceAccount || '—',
+          t.destinationAccount || '—',
+          Number(t.amount),
+          t.note || '',
+        ]),
+        summary: selectedAccount
+          ? { 'Entries': filteredHistory.length, 'Money In': accountIn, 'Money Out': accountOut, 'Net Change': accountIn - accountOut }
+          : { 'Entries': filteredHistory.length, 'Total Volume': filteredHistory.reduce((s, t) => s + Number(t.amount), 0) },
       };
-      if (format === 'pdf') await downloadReportPdf('ledger', opts);
-      else await downloadReportXlsx('ledger', opts);
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const fname = `ledger${selectedAccount ? `-${selectedAccount}` : ''}${typeFilter !== 'All' ? `-${typeFilter.toLowerCase()}` : ''}-${stamp}.${format}`;
+      if (format === 'pdf') await exportDataPdf(report, fname);
+      else await exportDataXlsx(report, fname);
       toast.success(format === 'pdf' ? 'PDF downloaded' : 'Excel downloaded');
     } catch (e: any) {
       toast.error(e?.message || 'Export failed');
