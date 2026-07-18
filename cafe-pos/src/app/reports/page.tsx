@@ -10,7 +10,7 @@ import {
   ShoppingBag, Pickaxe, Banknote, ArrowUpRight, ArrowDownRight, Activity, FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { downloadReportPdf } from '@/lib/pdfReports';
+import { downloadReportPdf, downloadReportXlsx } from '@/lib/pdfReports';
 
 const PDF_TYPES = [
   { value: 'sales_daily', label: 'Sales by Day' },
@@ -68,17 +68,19 @@ export default function ReportsPage() {
 
   const [pdfType, setPdfType] = useState('sales_daily');
   const [pdfBusy, setPdfBusy] = useState(false);
-  const handlePdf = async () => {
+  const handleExport = async (format: 'pdf' | 'xlsx') => {
     setPdfBusy(true);
     try {
       // Use the selected custom dates when present; API defaults to current month
-      await downloadReportPdf(pdfType as any, {
+      const opts = {
         from: range === 'custom' && startDate ? startDate : undefined,
         to: range === 'custom' && endDate ? endDate : undefined,
-      });
-      toast.success('PDF downloaded');
+      };
+      if (format === 'pdf') await downloadReportPdf(pdfType as any, opts);
+      else await downloadReportXlsx(pdfType as any, opts);
+      toast.success(format === 'pdf' ? 'PDF downloaded' : 'Excel downloaded');
     } catch (e: any) {
-      toast.error(e?.message || 'PDF export failed');
+      toast.error(e?.message || 'Export failed');
     }
     setPdfBusy(false);
   };
@@ -152,8 +154,11 @@ export default function ReportsPage() {
                 <select className="border border-slate-300 bg-white text-xs font-bold p-1.5 rounded-md text-slate-700" value={pdfType} onChange={e => setPdfType(e.target.value)}>
                   {PDF_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-                <Button size="sm" onClick={handlePdf} disabled={pdfBusy} className="font-bold text-xs bg-red-700 hover:bg-red-800 text-white">
-                  <FileDown className="w-3 h-3 mr-2"/> {pdfBusy ? 'Building...' : 'Download PDF'}
+                <Button size="sm" onClick={() => handleExport('pdf')} disabled={pdfBusy} className="font-bold text-xs bg-red-700 hover:bg-red-800 text-white">
+                  <FileDown className="w-3 h-3 mr-2"/> {pdfBusy ? '...' : 'PDF'}
+                </Button>
+                <Button size="sm" onClick={() => handleExport('xlsx')} disabled={pdfBusy} className="font-bold text-xs bg-green-700 hover:bg-green-800 text-white">
+                  <FileDown className="w-3 h-3 mr-2"/> {pdfBusy ? '...' : 'Excel'}
                 </Button>
               </>
             )}

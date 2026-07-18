@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Client-side PDF generation for reports (jsPDF + autotable).
- * Fetches /api/reports/export and downloads a formatted PDF.
+ * Client-side report exports (PDF via jsPDF, Excel via SheetJS).
+ * Both fetch the same /api/reports/export data.
  */
-export async function downloadReportPdf(
-  type: 'sales_daily' | 'sales_monthly' | 'sales_orders' | 'ledger' | 'expenses' | 'wastage',
-  opts: { from?: string; to?: string; shopName?: string; account?: string } = {}
-) {
+export type ReportType = 'sales_daily' | 'sales_monthly' | 'sales_orders' | 'ledger' | 'expenses' | 'wastage';
+export type ReportOpts = { from?: string; to?: string; shopName?: string; account?: string };
+
+async function fetchReport(type: ReportType, opts: ReportOpts) {
   const params = new URLSearchParams({ type });
   if (opts.from) params.set('from', opts.from);
   if (opts.to) params.set('to', opts.to);
@@ -18,7 +18,44 @@ export async function downloadReportPdf(
     const j = await res.json().catch(() => ({}));
     throw new Error(j.error || 'Failed to fetch report data');
   }
-  const report = await res.json();
+  return res.json();
+}
+
+function fileStamp(type: ReportType, opts: ReportOpts, ext: string) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  return `${type}${opts.account ? `-${opts.account}` : ''}-${stamp}.${ext}`;
+}
+
+/** Download the report as an Excel (.xlsx) file. */
+export async function downloadReportXlsx(type: ReportType, opts: ReportOpts = {}) {
+  const report = await fetchReport(type, opts);
+  const XLSX = await import('xlsx');
+
+  const aoa: any[][] = [
+    [opts.shopName || '67 Café'],
+    [report.title],
+    [`Generated ${new Date().toLocaleString()}`],
+    [],
+    report.columns,
+    ...report.rows,
+    [],
+    ['SUMMARY'],
+    ...Object.entries(report.summary || {}).map(([k, v]) => [k, v]),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = report.columns.map((c: string, i: number) => ({
+    wch: Math.max(c.length + 2, ...report.rows.map((r: any[]) => String(r[i] ?? '').length + 2), 10),
+  }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, report.title.slice(0, 31).replace(/[\\/?*[\]:]/g, '-'));
+  XLSX.writeFile(wb, fileStamp(type, opts, 'xlsx'));
+}
+
+/** Download the report as a formatted PDF. */
+export async function downloadReportPdf(type: ReportType, opts: ReportOpts = {}) {
+  const report = await fetchReport(type, opts);
 
   const { default: jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
@@ -69,6 +106,5 @@ export async function downloadReportPdf(
     doc.text(`Page ${i} of ${pages}`, pageWidth - 40, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
   }
 
-  const stamp = new Date().toISOString().slice(0, 10);
-  doc.save(`${type}${opts.account ? `-${opts.account}` : ''}-${stamp}.pdf`);
+  doc.save(fileStamp(type, opts, 'pdf'));
 }

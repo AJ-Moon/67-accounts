@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency } from '@/lib/utils';
 import { toast } from "sonner";
 import { ArrowDownRight, ArrowUpRight, ReceiptText, Banknote, PiggyBank, Plus, FileDown, X } from 'lucide-react';
-import { downloadReportPdf } from '@/lib/pdfReports';
+import { downloadReportPdf, downloadReportXlsx } from '@/lib/pdfReports';
 
 type LedgerTransaction = {
   id: string;
@@ -131,17 +131,19 @@ export default function AccountsPage() {
   const accountOut = selectedAccount
     ? filteredHistory.filter(t => t.sourceAccount === selectedAccount).reduce((s, t) => s + Number(t.amount), 0) : 0;
 
-  const handleAccountPdf = async () => {
+  const handleExport = async (format: 'pdf' | 'xlsx') => {
     setPdfBusy(true);
     try {
-      await downloadReportPdf('ledger', {
+      const opts = {
         account: selectedAccount || undefined,
         from: fromDate || '2000-01-01', // no date chosen = full history, same as on screen
         to: toDate || undefined,
-      });
-      toast.success('PDF downloaded');
+      };
+      if (format === 'pdf') await downloadReportPdf('ledger', opts);
+      else await downloadReportXlsx('ledger', opts);
+      toast.success(format === 'pdf' ? 'PDF downloaded' : 'Excel downloaded');
     } catch (e: any) {
-      toast.error(e?.message || 'PDF export failed');
+      toast.error(e?.message || 'Export failed');
     }
     setPdfBusy(false);
   };
@@ -489,9 +491,14 @@ export default function AccountsPage() {
                 </button>
               )}
               <span className="text-[11px] text-slate-400 font-medium">{filteredHistory.length} entries</span>
-              <Button size="sm" onClick={handleAccountPdf} disabled={pdfBusy} className="h-8 text-xs font-bold bg-red-700 hover:bg-red-800 text-white ml-auto">
-                <FileDown className="w-3 h-3 mr-1" /> {pdfBusy ? '...' : 'PDF'}
-              </Button>
+              <div className="flex gap-1 ml-auto">
+                <Button size="sm" onClick={() => handleExport('pdf')} disabled={pdfBusy} className="h-8 text-xs font-bold bg-red-700 hover:bg-red-800 text-white">
+                  <FileDown className="w-3 h-3 mr-1" /> {pdfBusy ? '...' : 'PDF'}
+                </Button>
+                <Button size="sm" onClick={() => handleExport('xlsx')} disabled={pdfBusy} className="h-8 text-xs font-bold bg-green-700 hover:bg-green-800 text-white">
+                  <FileDown className="w-3 h-3 mr-1" /> {pdfBusy ? '...' : 'Excel'}
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
